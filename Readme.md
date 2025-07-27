@@ -24,7 +24,19 @@ This repository contains a proof-of-concept that combines five key ideas:
 - QEMU scripts are provided for testing purposes.
 - Embedded systems based on Intel Atom or ARM64 architectures.
 
-## How to run
+## How to Build Applications
+
+There is a Docker container: `ci/Dockerfile.debian`.
+
+The script `ci/build.sh` builds:
+
+1. DPDK, which is a submodule in `3rdparty/dpdk`.
+
+2. libiec61850, which is a submodule in `3rdparty/libiec61850`.
+
+3. `bus_processor`, `bus_generator` and `unit_tests`.
+
+## How to Run
 
 There are special scripts(qemu): `run_generator.sh` and `run_processor.sh`.
 
@@ -50,8 +62,8 @@ Processing packets:
 3. `./run_processor.sh --goose 100`  
    Expect 100 GOOSE messages from a generator.
 
-## Performance metrics  
-Intel Atom 
+## Performance metrics(non-RT)  
+Intel Atom C3808 & Intel X553 NIC
 
 1. Generating 1000 SV80 and Receiving Them Back via 10Gb/s SFP Module
 
@@ -124,7 +136,7 @@ Intel Atom
    |--------|----------|----------|---------|---------|
    | Main   | 38       | 145      | 56.655  | 43.345  |
 
-   Bus Processor (Core 2):
+   Bus Processor (Core 2,3,4):
 
    | Metric | Min (µs) | Max (µs) | Load %  | Wait %  |
    |--------|----------|----------|---------|---------|
