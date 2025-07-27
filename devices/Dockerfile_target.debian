@@ -1,0 +1,29 @@
+FROM debian:12
+
+# Define a username variable
+ARG USERNAME=admin
+
+# Enable testing sources
+RUN echo "deb http://deb.debian.org/debian testing main" >> /etc/apt/sources.list
+
+# Update and install packages
+RUN apt-get update && apt-get -y --no-install-recommends install \
+    ranger vim sudo bash \
+    pciutils libatomic1 elfutils \
+    libbpf1 libpcap0.8 libxdp1 libnuma1 \
+    openssh-client sshpass \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a new user with the specified username and add to the sudo group
+RUN useradd -m -s /bin/bash $USERNAME \
+    && echo "$USERNAME:$USERNAME" | chpasswd \
+    && usermod -aG sudo $USERNAME \
+    && echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/$USERNAME
+
+# Set working directory
+WORKDIR /home/$USERNAME
+USER $USERNAME
+
+CMD ["/bin/bash"]
+
