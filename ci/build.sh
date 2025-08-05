@@ -89,10 +89,25 @@ function build_apps()
         -DBUILD_TESTS=ON \
         -DBUILD_SAMPLES=OFF \
         -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
-        -DCMAKE_CXX_FLAGS_RELEASE="-O3 -msse3" \
-        -DCMAKE_C_FLAGS_RELEASE="-O3 -msse3"
+        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+        -DCMAKE_CXX_FLAGS_RELEASE="-O3 -march=$TARGET_PROCESSOR -msse3" \
+        -DCMAKE_C_FLAGS_RELEASE="-O3 -march=$TARGET_PROCESSOR -msse3"
 
     rebuild_and_install
+}
+
+function check_code()
+{
+    mkdir -p $INSTALL_DIR
+    cppcheck --enable=all --std=c++20 \
+            --suppress=missingIncludeSystem --suppress=missingInclude \
+            --check-level=exhaustive \
+            --suppress=cstyleCast \
+            --inconclusive --force --quiet \
+            -i3rdparty -ibuild -iplayground \
+            -I$REPO_DIR/src/ \
+            --output-file=$INSTALL_DIR/cppcheck_results.txt \
+            $REPO_DIR
 }
 
 # Options
@@ -112,6 +127,10 @@ while [[ "$#" -gt 0 ]]; do
             OPT_BUILD_DPDK=0
             OPT_BUILD_PBUS=0
             OPT_REBUILD=1
+            ;;
+        --check)
+            check_code
+            exit 0
             ;;
         *) usage;;
     esac

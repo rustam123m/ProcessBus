@@ -18,7 +18,7 @@ namespace Pipeline
     struct Matrix
     {
         using Frame = TFrame;
-        Matrix(TApp *ptr) : app(ptr) {}
+        explicit Matrix(TApp *ptr) : app(ptr) {}
 
         Frame stages[TNodeEnum::STAGE_NUM] = {};
         TApp *app = nullptr;

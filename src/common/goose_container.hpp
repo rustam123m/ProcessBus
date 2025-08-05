@@ -81,7 +81,7 @@ public:
     using ptr = std::shared_ptr< GooseSource >;
     GooseSource() {}
 
-    GooseSource&    SetMAC(const MAC mac) {
+    GooseSource&    SetMAC(const MAC &mac) {
         m_dmac = mac;
         return *this;
     }
