@@ -19,10 +19,10 @@ namespace PBus
     {
         START_STAGE = 0,
 
-        ROUTER = 0,
-        GOOSE,
-        SV,
-        IP,
+        ROUTER  = 0,
+        GOOSE   = 1,
+        SV      = 2,
+        IP      = 3,
 
         STAGE_NUM
     };

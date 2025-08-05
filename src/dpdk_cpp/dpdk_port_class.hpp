@@ -17,7 +17,7 @@ namespace DPDK
      */
     class Port
     {
-        Port(uint16_t m_portID) : m_portID(m_portID) {}
+        explicit Port(uint16_t m_portID) : m_portID(m_portID) {}
     public:
         Port() = delete;
         Port(const Port&) = delete;
@@ -176,7 +176,7 @@ namespace DPDK
     class PortBuilder
     {
     public:
-        PortBuilder(uint16_t m_portID) : m_portID(m_portID) { }
+        explicit PortBuilder(uint16_t m_portID) : m_portID(m_portID) { }
 
         PortBuilder& SetMemPool(rte_mempool* pool) {
             m_mbufPool = pool;

@@ -1,9 +1,9 @@
 #pragma once
 
-#include <stdint.h>
 #include <sched.h>
 #include <pthread.h>
-#include <signal.h>
+#include <cstdint>
+#include <csignal>
 #include <sys/signalfd.h>
 #include <sys/timerfd.h>
 

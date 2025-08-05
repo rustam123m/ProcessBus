@@ -124,7 +124,6 @@ public:
             if (retval < 0 || packetSize == 0) {
                 throw std::runtime_error("Can't generate GOOSE with libiec61850"
                                          + std::to_string(retval));
-                return 0;
             }
 
             GoosePublisher_destroy(publisher);

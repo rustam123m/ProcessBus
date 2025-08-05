@@ -8,6 +8,7 @@
 
 #include <iomanip>
 #include <iostream>
+#include <format>
 
 namespace DPDK
 {
@@ -60,11 +61,9 @@ namespace DPDK
 
                 rte_ether_addr mac;
                 rte_eth_macaddr_get(port_id, &mac);
-
-                char mac_str[18];
-                snprintf(mac_str, sizeof(mac_str), "%02x:%02x:%02x:%02x:%02x:%02x",
-                         mac.addr_bytes[0], mac.addr_bytes[1], mac.addr_bytes[2],
-                         mac.addr_bytes[3], mac.addr_bytes[4], mac.addr_bytes[5]);
+                std::string mac_str = std::format("{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+                                                  mac.addr_bytes[0], mac.addr_bytes[1], mac.addr_bytes[2],
+                                                  mac.addr_bytes[3], mac.addr_bytes[4], mac.addr_bytes[5]);
                 std::cout << std::setw(10) << port_id 
                           << std::setw(20) << dev.driver_name
                           << std::setw(15) << dev.nb_rx_queues
@@ -109,28 +108,47 @@ namespace DPDK
         {
             rte_eth_stats stats;
             if (rte_eth_stats_get(port_id, &stats) != 0) {
-                printf("Error getting port statistics for port %u\n", port_id);
+                std::cerr << std::format("Error getting port statistics for port {}\n", port_id);
                 return;
             }
 
-            printf("Port %u Statistics:\n", port_id);
-            printf("\tRX-packets: %" PRIu64 "\n", stats.ipackets);
-            printf("\tTX-packets: %" PRIu64 "\n", stats.opackets);
-            printf("\tRX-bytes:   %" PRIu64 "\n", stats.ibytes);
-            printf("\tTX-bytes:   %" PRIu64 "\n", stats.obytes);
-            printf("\tRX-errors:  %" PRIu64 "\n", stats.ierrors);
-            printf("\tTX-errors:  %" PRIu64 "\n", stats.oerrors);
-            printf("\tRX-missed:  %" PRIu64 "\n", stats.imissed);
-            printf("\tRX-no-mbuf: %" PRIu64 "\n", stats.rx_nombuf);
+            std::cout << std::format("Port {} Statistics:\n"
+                                     "\tPackets: RX = {:<10} TX = {:<10}\n"
+                                     "\tBytes:   RX = {:<10} TX = {:<10}\n"
+                                     "\tErrors:  RX = {:<10} TX = {:<10}\n"
+                                     "\tRX-missed:  {}\n"
+                                     "\tRX-no-mbuf: {}\n",
+                                     port_id,
+                                     stats.ipackets, stats.opackets,
+                                     stats.ibytes, stats.obytes,
+                                     stats.ierrors, stats.oerrors,
+                                     stats.imissed,
+                                     stats.rx_nombuf
+                                    );
 
-            int nb_xstats = rte_eth_xstats_get(port_id, NULL, 0); // find how many
-            rte_eth_xstat xstats[nb_xstats];
-            rte_eth_xstats_get(port_id, xstats, nb_xstats);
+            // Find how many xstats are required
+            int nb_xstats = rte_eth_xstats_get(port_id, nullptr, 0);
+            if (nb_xstats < 0) {
+                std::cerr << "Failed to get the number of xstats" << std::endl;
+                return;
+            }
 
-            rte_eth_xstat_name names[nb_xstats];
-            rte_eth_xstats_get_names(port_id, names, nb_xstats);
-            for (int i = 0; i < nb_xstats; i++) {
-                printf("\t%s, Value: %" PRIu64 "\n", names[i].name, xstats[i].value);
+            // xstat values and names
+            std::vector<rte_eth_xstat> xstats(nb_xstats);
+            if (rte_eth_xstats_get(port_id, xstats.data(), nb_xstats) < 0) {
+                std::cerr << "Failed to get xstat values" << std::endl;
+                return;
+            }
+            std::vector<rte_eth_xstat_name> names(nb_xstats);
+            if (rte_eth_xstats_get_names(port_id, names.data(), nb_xstats) < 0) {
+                std::cerr << "Failed to get xstat names" << std::endl;
+                return;
+            }
+
+            // Print each xstat's name and value using std::cout and std::format
+            for (int i=0;i<nb_xstats;i++) {
+                std::cout << std::format("\t{}, Value: {}\n",
+                                         names[i].name, xstats[i].value);
             }
         }
 
@@ -140,12 +158,12 @@ namespace DPDK
             rte_eth_link_get_nowait(port_id, &link);
 
             if (link.link_status) {
-                printf("Port %u Link Up - Speed: %u Mbps - %s\n",
-                       port_id,
-                       link.link_speed,
-                       link.link_duplex == RTE_ETH_LINK_FULL_DUPLEX ? "Full Duplex" : "Half Duplex");
+                std::cout << std::format("Port {}: Link Up - Speed: {}, Mbps - {}\n",
+                                         port_id, link.link_speed,
+                                         (link.link_duplex == RTE_ETH_LINK_FULL_DUPLEX) ? "Full Duplex"
+                                                                                        : "Half Duplex");
             } else {
-                printf("Port %u Link Down\n", port_id);
+                std::cout << std::format("Port {}: Link Down\n", port_id);
             }
         }
 
@@ -169,25 +187,30 @@ namespace DPDK
 
         static void display_mbuf_info(const rte_mbuf *mbuf)
         {
-            printf("MBuf Information:\n");
-            printf("\tPacket Length: %u\n", rte_pktmbuf_pkt_len(mbuf));
-            printf("\tData Length: %u\n", rte_pktmbuf_data_len(mbuf));
-            printf("\tPort ID: %u\n", mbuf->port);
-            printf("\tRSS Hash: 0x%X\n", mbuf->hash.rss);
-            printf("\tVLAN TCI: 0x%X\n", mbuf->vlan_tci);
-            printf("\tOffload Flags: 0x%lX\n", mbuf->ol_flags);
-            /* printf("  Timestamp: %" PRIu64 "\n", mbuf->timestamp); */
+            std::cout << std::format("MBuf Information:\n"
+                                     "\tPacket len: {}\n"
+                                     "\tData len: {}\n"
+                                     "\tPort ID: {}\n"
+                                     "\tRSS hash: 0x{:X}\n"
+                                     "\tVLAN TCI: 0x{:X}\n"
+                                     "\tOffload flags: 0x{:X}\n",
+                                     rte_pktmbuf_pkt_len(mbuf),
+                                     rte_pktmbuf_data_len(mbuf),
+                                     mbuf->port,
+                                     mbuf->hash.rss,
+                                     mbuf->vlan_tci,
+                                     mbuf->ol_flags);
 
             // Print raw packet data
-            printf("\nPacket Data:\n");
-            const uint8_t *data = rte_pktmbuf_mtod(mbuf, const uint8_t *);
-            for (uint32_t i = 0; i < rte_pktmbuf_data_len(mbuf); i++) {
-                printf("%02X ", data[i]);
-                if ((i + 1) % 16 == 0) {
-                    printf("\n");
+            std::cout << "\nPacket Data:\n";
+            const uint8_t *data = rte_pktmbuf_mtod(mbuf, const uint8_t*);
+            for (auto i=0;i<rte_pktmbuf_data_len(mbuf);++i) {
+                if ((i > 0) && (i % 16 == 0)) {
+                    std::cout << "\n";
                 }
+                std::cout << std::format("{:02X} ", static_cast<int>(data[i]));
             }
-            printf("\n");
+            std::cout << std::dec << "\n";  // Reset to decimal 
         }
     };
 }

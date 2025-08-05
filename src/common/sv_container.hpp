@@ -62,7 +62,7 @@ class alignas(64) SVStreamSource
 public:
     using ptr = std::shared_ptr< SVStreamSource >;
 
-    SVStreamSource&    SetMAC(const MAC mac) {
+    SVStreamSource&    SetMAC(const MAC &mac) {
         m_dmac = mac;
         return *this;
     }
