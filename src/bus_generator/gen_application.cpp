@@ -66,7 +66,7 @@ static void tx_packets_cycle(TxCycleConfig &conf, GenAppStat &stat, GenClass &ge
 
     // Main cycle
     unsigned txUnitIdx = 0;
-    rte_mbuf* mbufs[BURST_SIZE] = { 0 };
+    rte_mbuf* mbufs[BURST_SIZE] = { nullptr };
     stat.procStat.MarkStartCycling();
     uint64_t secStartTick = DPDK::Clocks::get_current_ticks();
     while (doWork) {
@@ -189,7 +189,7 @@ void GenApplication::Run(StopVarType &doWork)
         throw std::runtime_error("Link is still down after 10 sec...");
     }
 
-    TxCycleConfig conf{pool.Get(), port.GetID(), nicQueueID};
+    TxCycleConfig conf { .pool=pool.Get(), .nicPortID=port.GetID(), .nicQueueID=nicQueueID };
 
     // Main cycle
     if (m_gooseNum > 0) {

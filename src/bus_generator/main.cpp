@@ -4,8 +4,8 @@
 #include <rte_ethdev.h>
 
 #include <poll.h>
-#include <stdlib.h>
 
+#include <cstdlib>
 #include <format>
 #include <thread>
 #include <iostream>
@@ -20,9 +20,9 @@ static void* auxiliary_thread()
     int signalFD = create_signalfd();
     int timerFD = create_timerfd();
 
-    struct pollfd fds[2] = {
-        { signalFD, POLLIN, 0 },
-        { timerFD, POLLIN, 0 }
+    pollfd fds[2] = {
+        { .fd = signalFD, .events= POLLIN, .revents = 0 },
+        { .fd = timerFD,  .events= POLLIN, .revents = 0 }
     };
 
     while (g_doWork) {
@@ -50,7 +50,7 @@ static void* auxiliary_thread()
 
     close(signalFD);
     close(timerFD);
-    return NULL;
+    return nullptr;
 }
 
 int main(int argc, char *argv[])

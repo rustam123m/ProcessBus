@@ -99,6 +99,8 @@ function build_apps()
 function check_code()
 {
     mkdir -p $INSTALL_DIR
+
+    echo "Check the source code with CppCheck....."
     cppcheck --enable=all --std=c++20 \
             --suppress=missingIncludeSystem --suppress=missingInclude \
             --check-level=exhaustive \
@@ -108,6 +110,14 @@ function check_code()
             -I$REPO_DIR/src/ \
             --output-file=$INSTALL_DIR/cppcheck_results.txt \
             $REPO_DIR
+    echo "Done"
+
+    echo "Check the source code with clang-tidy....."
+    find $REPO_DIR/src/ -name '*.cpp' -or -name '*.hpp' > $BUILD_DIR/tidy_files.txt
+    clang-tidy -p $BUILD_DIR -quiet \
+        $(< $BUILD_DIR/tidy_files.txt) \
+        > $BUILD_DIR/clang-tidy.log 2>&1
+    echo "Done"
 }
 
 # Options

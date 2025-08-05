@@ -3,9 +3,8 @@
 #include <rte_eal.h>
 #include <rte_ethdev.h>
 
-#include <poll.h>
-#include <stdlib.h>
-
+#include <sys/poll.h>
+#include <cstdlib>
 #include <format>
 #include <atomic>
 #include <thread>
@@ -22,9 +21,9 @@ static void* auxiliary_thread(RX_Application::ptr app)
     int signalFD = create_signalfd();
     int timerFD = create_timerfd(TIMER_PERIOD_SEC);
 
-    struct pollfd fds[2] = {
-        { signalFD, POLLIN, 0 },
-        { timerFD, POLLIN, 0 }
+    pollfd fds[2] = {
+        { .fd = signalFD, .events= POLLIN, .revents = 0 },
+        { .fd = timerFD,  .events= POLLIN, .revents = 0 }
     };
 
     while (g_doWork) {
@@ -54,7 +53,7 @@ static void* auxiliary_thread(RX_Application::ptr app)
 
     close(signalFD);
     close(timerFD);
-    return NULL;
+    return nullptr;
 }
 
 int main(int argc, char *argv[])

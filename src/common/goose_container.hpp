@@ -79,7 +79,7 @@ class alignas(64) GooseSource
 {
 public:
     using ptr = std::shared_ptr< GooseSource >;
-    GooseSource() {}
+    GooseSource() = default;
 
     GooseSource&    SetMAC(const MAC &mac) {
         m_dmac = mac;

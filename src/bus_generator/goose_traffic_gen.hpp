@@ -7,7 +7,10 @@
 #include <cstdint>
 #include <cstring>
 
-#define MAX_GOOSE_PACKET_SIZE      1518
+enum GOOSE_PROTOCOL
+{
+    MAX_GOOSE_PACKET_SIZE = 1518
+};
 
 enum GOOSE_PARAM_OFFSETS
 {
