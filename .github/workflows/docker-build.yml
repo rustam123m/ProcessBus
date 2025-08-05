@@ -1,0 +1,43 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build Docker image
+        run: docker build -f ci/Dockerfile.debian -t pbus-build .
+
+      - name: Run build script
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            --user $(id -u):$(id -g) \
+            pbus-build bash ci/build.sh
+
+      - name: Prepare artifact name
+        id: prep
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          BRANCH="${GITHUB_REF_NAME//\//-}"
+          DATE=$(date +%Y%m%d)
+          echo "file=pbus-${BRANCH}-${DATE}-${GITHUB_RUN_NUMBER}.tar.gz" >> "$GITHUB_OUTPUT"
+
+      - name: Package install directory
+        run: tar -czf "${{ steps.prep.outputs.file }}" -C install .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.prep.outputs.file }}
+          path: ${{ steps.prep.outputs.file }}
