@@ -36,11 +36,11 @@ int create_signalfd()
     sigemptyset(&mask);
     sigaddset(&mask, SIGINT);
     sigaddset(&mask, SIGTERM);
-    sigprocmask(SIG_BLOCK, &mask, NULL);
+    sigprocmask(SIG_BLOCK, &mask, nullptr);
 
     int fd = signalfd(-1, &mask, SFD_NONBLOCK);
     if (fd < 0) {
-        std::cerr << "Can't create Signal FD" << std::endl;
+        std::cerr << "Can't create Signal FD\n";
         abort();
     }
     return fd;
@@ -50,14 +50,14 @@ int create_timerfd(int periodSec)
 {
     int fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK);
     if (fd < 0) {
-        std::cerr << "Can't create Timer FD" << std::endl;
+        std::cerr << "Can't create Timer FD\n";
         abort();
     }
 
     itimerspec its = {};
     its.it_interval.tv_sec = periodSec;
     its.it_value.tv_sec = periodSec;
-    timerfd_settime(fd, 0, &its, NULL);
+    timerfd_settime(fd, 0, &its, nullptr);
     return fd;
 }
 

@@ -13,7 +13,7 @@ class MAC
 {
     static constexpr size_t SIZE = 6;
 public:
-    MAC() {}
+    MAC() = default;
     explicit MAC(const uint8_t bytes[SIZE]) {
         std::copy(bytes, bytes + SIZE, m_mac.begin());
     }
