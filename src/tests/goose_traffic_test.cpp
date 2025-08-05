@@ -11,23 +11,21 @@
 #include <gtest/gtest.h>
 #include <stdexcept>
 
-#define MAX_PACKET_SIZE     1518
-
 class GooseParserByLib
 {
 public:
     GooseParserByLib()
     {
         char port[8] = "";
-        m_subscriber = GooseSubscriber_create(port, NULL);
-        if (m_subscriber == NULL) {
+        m_subscriber = GooseSubscriber_create(port, nullptr);
+        if (m_subscriber == nullptr) {
             throw std::runtime_error("Can't create GooseSubscriber from libiec61850!");
         }
         GooseSubscriber_setObserver(m_subscriber);
         GooseSubscriber_setListener(m_subscriber, GooseParserByLib::callback_handler, this);
 
         m_receiver = GooseReceiver_create();
-        if (m_receiver == NULL) {
+        if (m_receiver == nullptr) {
             throw std::runtime_error("Can't create GooseReceiver from libiec61850!");
         }
         GooseReceiver_addSubscriber(m_receiver, m_subscriber);
@@ -119,7 +117,7 @@ public:
 
             int retval = GoosePublisher_generateMessage(publisher, &ethParams, 
                                                         dataSetValues,
-                                                        buffer, MAX_PACKET_SIZE, 
+                                                        buffer, MAX_GOOSE_PACKET_SIZE, 
                                                         &packetSize);
             if (retval < 0 || packetSize == 0) {
                 throw std::runtime_error("Can't generate GOOSE with libiec61850"
@@ -200,7 +198,7 @@ TEST(BusGenerator, BasicUsage)
     const unsigned GooseNum = 10, SndFreq = 1, SignalNum = 16;
     GooseTrafficGen gen(GooseNum, SndFreq, SignalNum);
 
-    std::vector< uint8_t > buffer(MAX_PACKET_SIZE);
+    std::vector< uint8_t > buffer(MAX_GOOSE_PACKET_SIZE);
     memcpy(buffer.data(), gen.GetSkeletonBuffer(), gen.GetSkeletonSize());
 
     auto units = gen.GetTxUnits();
@@ -227,7 +225,7 @@ TEST(BusGenerator, CheckPacketsByLibiec61850)
     /* const unsigned GooseNum = 1000, SndFreq = 1000, SignalNum = 16; */
     GooseTrafficGen gen(GooseNum, SndFreq, SignalNum);
 
-    std::vector< uint8_t > buffer(MAX_PACKET_SIZE);
+    std::vector< uint8_t > buffer(MAX_GOOSE_PACKET_SIZE);
     memcpy(buffer.data(), gen.GetSkeletonBuffer(), gen.GetSkeletonSize());
 
     auto &units = gen.GetTxUnits();
@@ -248,7 +246,7 @@ TEST(BusGenerator, CheckPacketsByLibiec61850)
 
 TEST(GooseFastParser, BasicUsage)
 {
-    uint8_t packet[MAX_PACKET_SIZE] = { 0 };
+    uint8_t packet[MAX_GOOSE_PACKET_SIZE] = { 0 };
     size_t size = 256;
     GoosePassport passport;
     GooseState state;
@@ -316,7 +314,7 @@ TEST(GooseContainer, BasicUsage)
     ASSERT_EQ(gooseMap.find(passport), gooseMap.end());
 
     // Test GOOSE packet
-    uint8_t packet[MAX_PACKET_SIZE] = { 0 };
+    uint8_t packet[MAX_GOOSE_PACKET_SIZE] = { 0 };
     GooseMakerByLib goose;
     GooseState state;
     size_t packetSize = goose.MakePacket(packet);

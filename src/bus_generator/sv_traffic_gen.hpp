@@ -3,8 +3,11 @@
 #include "tx_unit.hpp"
 #include "rte_byteorder.h"
 
-#define MAX_SV_PACKET_SIZE      1518
-#define MAX_SV_ASDU_NUM         8
+enum SV_PROTOCOL
+{
+    MAX_SV_PACKET_SIZE = 1518,
+    MAX_SV_ASDU_NUM    = 8
+};
 
 enum SV_ASDU_OFFSETS
 {

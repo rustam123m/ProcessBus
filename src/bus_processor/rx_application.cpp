@@ -18,7 +18,7 @@ namespace
         LCoreProcessor *conf = reinterpret_cast< LCoreProcessor* >(arg);
         if (conf == nullptr) {
             g_doWork = false;
-            std::cerr << "LCore: Config is NULL!" << std::endl;
+            std::cerr << "LCore: Config is NULL!\n";
             return -1;
         }
 
@@ -117,7 +117,7 @@ namespace
                 throw std::runtime_error("Can't create ring for lcoreWorker: " + ringName);
             }
 
-            lcoreWorker.push_back(LCoreProcessor(ring, &app, lcore));
+            lcoreWorker.emplace_back(ring, &app, lcore);
             rte_eal_remote_launch(lcore_processor, &lcoreWorker[wIndex], lcore);
             ++wIndex;
         }
@@ -137,7 +137,7 @@ namespace
 
         // Workers' queues
         struct {
-            rte_mbuf* buff[RX_BURST_SIZE] = {};
+            rte_mbuf* buff[RX_BURST_SIZE] = { nullptr };
             unsigned  num = 0;
 
             inline void Put(rte_mbuf *buf) {
@@ -149,7 +149,7 @@ namespace
         // Main cycle
         DPDK::CyclicStat procStat;
         procStat.MarkStartCycling();
-        rte_mbuf* bufs[RX_BURST_SIZE] = { 0 };
+        rte_mbuf* bufs[RX_BURST_SIZE] = { nullptr };
         while (g_doWork) {
             uint16_t rxNum = rte_eth_rx_burst(eth.GetID(), queue_id, bufs, RX_BURST_SIZE);
             if (rxNum > 0) {
@@ -169,7 +169,7 @@ namespace
                         rte_ring_sp_enqueue_burst(lcoreWorker[i].m_ring,
                                                   (void * const *)workerQueue[i].buff,
                                                   workerQueue[i].num,
-                                                  NULL);
+                                                  nullptr);
                         workerQueue[i].num = 0;
                     }
                 }

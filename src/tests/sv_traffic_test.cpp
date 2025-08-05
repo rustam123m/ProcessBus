@@ -11,8 +11,6 @@
 #include <gtest/gtest.h>
 #include <stdexcept>
 
-#define MAX_PACKET_SIZE     1518
-
 class SVMakerByLib
 {
 public:
@@ -97,7 +95,7 @@ TEST(BusGenerator, SVTrafficBasicUsage)
 
 TEST(SVFastParser, BasicUsage)
 {
-    uint8_t packet[MAX_PACKET_SIZE] = { 0 };
+    uint8_t packet[MAX_SV_PACKET_SIZE] = { 0 };
     size_t size = 256;
     SVStreamPassport passport;
     SVStreamState state;
@@ -125,7 +123,7 @@ TEST(SVStreamContainer, BasicUsage)
     ASSERT_EQ(svStreamMap.find(passport), svStreamMap.end());
     
     // Test SV packet
-    uint8_t packet[MAX_PACKET_SIZE] = { 0 };
+    uint8_t packet[MAX_SV_PACKET_SIZE] = { 0 };
     SVMakerByLib svByLib;
     SVStreamState state;
     size_t packetSize = svByLib.MakePacket(packet);

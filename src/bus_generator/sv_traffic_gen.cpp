@@ -3,7 +3,7 @@
 #include "mms_value.h"
 #include "sv_publisher.h"
 
-#include <inttypes.h>
+#include <cinttypes>
 #include <stdexcept>
 
 #define PLACEHOLDER             "1234"
@@ -50,7 +50,7 @@ void SVTrafficGen::MakeSkeletonSV80()
 
     SVPublisher sv80 = SVPublisher_create(&ethParams, "lo");
     if (sv80) {
-        SVPublisher_ASDU asdu = SVPublisher_addASDU(sv80, SVID_PATTERN, NULL, 1);
+        SVPublisher_ASDU asdu = SVPublisher_addASDU(sv80, SVID_PATTERN, nullptr, 1);
 
         int vIndex[8] = { 0 }, qIndex[8] = { 0 };
         for (int i=0;i<8;++i) {
@@ -90,7 +90,7 @@ void SVTrafficGen::MakeSkeletonSV256()
     if (sv256) {
         SVPublisher_ASDU asdu[MAX_SV_ASDU_NUM]; // 9.2LE 256 points
         for (int i=0;i<MAX_SV_ASDU_NUM;++i) {
-            asdu[i] = SVPublisher_addASDU(sv256, SVID_PATTERN, NULL, 1);
+            asdu[i] = SVPublisher_addASDU(sv256, SVID_PATTERN, nullptr, 1);
             for (int j=0;j<8;++j) {
                 SVPublisher_ASDU_addINT32(asdu[i]);
                 SVPublisher_ASDU_addQuality(asdu[i]);

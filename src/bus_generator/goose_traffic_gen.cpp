@@ -5,10 +5,8 @@
 #include "goose_receiver.h"
 
 #include <iostream>
-#include <inttypes.h>
+#include <cinttypes>
 #include <stdexcept>
-
-#define GOOSE_MAX_MESSAGE_SIZE      1500
 
 /**
  * @note 
@@ -78,7 +76,7 @@ void GooseTrafficGen::MakeSkeletonPacket(unsigned sigNum)
 
         int retval = GoosePublisher_generateMessage(
                         publisher, &gooseCommParameters, dataSetValues,
-                        m_skeleton, GOOSE_MAX_MESSAGE_SIZE, &m_skeletonSize
+                        m_skeleton, MAX_GOOSE_PACKET_SIZE, &m_skeletonSize
                     );
         if (retval == -1) {
             throw std::invalid_argument("Can't generate GOOSE message with libiec61850 "

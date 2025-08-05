@@ -5,7 +5,7 @@ namespace Pipeline
     template< typename MBUF, unsigned MAX_NUM = 32 >
     struct Frame
     {
-        MBUF*       buf[MAX_NUM] = {};
+        MBUF*       buf[MAX_NUM] = { nullptr };
         unsigned    num = 0;
 
         inline void PutBuffer(MBUF *ptr) {
