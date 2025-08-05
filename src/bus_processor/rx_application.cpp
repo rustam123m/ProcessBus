@@ -322,14 +322,16 @@ void RX_Application::DisplayStatistic(unsigned interval_sec)
                         "MBytes      | {:<10.1f} | {:<10.1f} |\n"
                         "Errors      | {:<10} | {:<10} |\n"
                         "Missed      | {:<10} |            |\n"
-                        "No-mbuf     | {:<10} |            |\n",
+                        "No-mbuf     | {:<10} |            |\n"
+                        "Q_Errors    | {:<10} |            |\n",
                         BYTES_TO_MEGABITS(rx_bps), BYTES_TO_MEGABITS(tx_bps),
                         rx_pps, tx_pps,
                         stats.ipackets, stats.opackets,
                         BYTES_TO_MEGABYTES(stats.ibytes), BYTES_TO_MEGABYTES(stats.obytes),
                         stats.ierrors, stats.oerrors,
                         stats.imissed,
-                        stats.rx_nombuf
+                        stats.rx_nombuf,
+                        stats.q_errors[0]
                     )
                   << std::endl;
     }

@@ -5,8 +5,8 @@ RUN echo "deb http://deb.debian.org/debian testing main" >> /etc/apt/sources.lis
 
 # Update and install packages
 RUN apt-get update && apt-get -y --no-install-recommends install \
-    ranger vim sudo bash \
-    coreutils git gcc-13 g++-13 make \
+    ranger vim sudo bash wget \
+    coreutils git gcc-13 g++-13 make cppcheck \
     linux-libc-dev \
     meson ninja-build cmake \
     pkg-config libbsd-dev \

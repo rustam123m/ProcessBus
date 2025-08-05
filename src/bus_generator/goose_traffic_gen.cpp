@@ -21,7 +21,7 @@ const char *DS_REF_PATTERN   = "IED" PLACEHOLDER "LDName/LLN0$DataSet";
 
 namespace 
 {
-    void print_goose_offsets(uint16_t offsets[])
+    void print_goose_offsets(const uint16_t offsets[])
     {
         std::cout << "Goose offsets:\n"
                   << "\t AppID = " << offsets[GOOSE_APPID_OFFSET] << "\n"
