@@ -16,11 +16,11 @@ TEST(AppIdContainer, BasicUsage)
         unsigned value = 0;
     };
 
-    Key k[5] = { { 1, "GOID1" },
-                 { 2, "GOID2" },
-                 { 3, "GOID3" },
-                 { 4, "GOID4" },
-                 { 5, "GOID5" } };
+    Key k[5] = { { .appid = 1, .goid = "GOID1" },
+                 { .appid = 2, .goid = "GOID2" },
+                 { .appid = 3, .goid = "GOID3" },
+                 { .appid = 4, .goid = "GOID4" },
+                 { .appid = 5, .goid = "GOID5" } };
     Value::ptr v[5] = { std::make_shared< Value >(),
                         std::make_shared< Value >(),
                         std::make_shared< Value >(),

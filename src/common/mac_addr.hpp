@@ -57,6 +57,12 @@ public:
     bool operator!=(const MAC &other) const {
         return m_mac != other.m_mac;
     }
+    uint8_t& operator[](const size_t idx) {
+        return m_mac[idx];
+    }
+    const uint8_t operator[](const size_t idx) const {
+        return m_mac[idx];
+    }
 
     friend std::ostream& operator<<(std::ostream &os, const MAC &mac) {
         return os << mac.toString();
@@ -66,6 +72,6 @@ public:
     uint8_t* data() { return m_mac.data(); }
 
 private:
-    std::array<uint8_t, SIZE> m_mac = { 0 };
+    std::array< uint8_t, SIZE > m_mac = { 0 };
 };
 

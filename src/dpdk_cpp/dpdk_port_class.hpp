@@ -53,6 +53,9 @@ namespace DPDK
         }
 
         inline uint16_t GetID() const { return m_portID; }
+        inline void GetMAC(rte_ether_addr &mac) const {
+            rte_eth_macaddr_get(m_portID, &mac);
+        }
 
         void SetPromisc(bool enable = true) {
             if (enable) {
@@ -157,6 +160,16 @@ namespace DPDK
             if (rte_eth_dev_info_get(obj.m_portID, &devInfo) == 0) {
                 out << "\tMaxRxQueue = " << devInfo.max_rx_queues << "\n"
                     << "\tMaxDescNum = " << devInfo.rx_desc_lim.nb_max << "\n";
+            }
+
+            rte_eth_link link = {};
+            rte_eth_link_get_nowait(obj.m_portID, &link);
+            if (link.link_status) {
+                out << "\tPortID = " << obj.m_portID << "\n"
+                    << "\tSpeed = " << link.link_speed << "\n"
+                    << "\tDuplex = " << (link.link_duplex == RTE_ETH_LINK_FULL_DUPLEX ? "full" : "half") << "\n";
+            } else {
+                out << "\tLink " << obj.m_portID << " is down!\n";
             }
             return out;
         }

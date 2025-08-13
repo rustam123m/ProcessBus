@@ -65,8 +65,9 @@ static void tx_packets_cycle(TxCycleConfig &conf, GenAppStat &stat, GenClass &ge
     /* set_thread_priority(DEF_GENERATOR_PRIORITY); */
 
     // Main cycle
-    unsigned txUnitIdx = 0;
     rte_mbuf* mbufs[BURST_SIZE] = { nullptr };
+    unsigned txUnitIdx = 0;
+
     stat.procStat.MarkStartCycling();
     uint64_t secStartTick = DPDK::Clocks::get_current_ticks();
     while (doWork) {
@@ -178,7 +179,7 @@ void GenApplication::Run(StopVarType &doWork)
 
     uint16_t nicPortID = 0, nicQueueID = 0;
     DPDK::Port port = DPDK::PortBuilder(nicPortID)
-                            .SetMemPool(pool.Get())
+                            .SetMemPool(pool.GetPtr())
                             .AdjustQueues(1, 1)
                             .SetDescriptors(RX_DESC_NUM, TX_DESC_NUM)
                             .Build();
@@ -188,8 +189,10 @@ void GenApplication::Run(StopVarType &doWork)
     if (!port.WaitLink(10)) {
         throw std::runtime_error("Link is still down after 10 sec...");
     }
+    // Link info
+    std::cout << port << "\n";
 
-    TxCycleConfig conf { .pool=pool.Get(), .nicPortID=port.GetID(), .nicQueueID=nicQueueID };
+    TxCycleConfig conf { .pool=pool.GetPtr(), .nicPortID=port.GetID(), .nicQueueID=nicQueueID };
 
     // Main cycle
     if (m_gooseNum > 0) {
@@ -198,7 +201,7 @@ void GenApplication::Run(StopVarType &doWork)
         GooseTrafficGen gen(m_gooseNum, m_gooseSendFreq, DEF_GOOSE_ENTRIES);
 
         DPDK::PoolSetter(gen.GetSkeletonBuffer(), gen.GetSkeletonSize())
-                        .FillPackets(pool.Get());
+                        .FillPackets(pool.GetPtr());
 
         // Generate cycle with GOOSE packets
         tx_packets_cycle< GooseTrafficGen >(conf, m_stat, gen, doWork);
@@ -207,7 +210,7 @@ void GenApplication::Run(StopVarType &doWork)
         SVTrafficGen gen(m_sv80Num, SV_TYPE::SV80);
 
         DPDK::PoolSetter(gen.GetSkeletonBuffer(), gen.GetSkeletonSize())
-                        .FillPackets(pool.Get());
+                        .FillPackets(pool.GetPtr());
 
         // Generate cycle with SV packets
         tx_packets_cycle< SVTrafficGen, &SVTrafficGen::AmendPacketSV80 >(conf, m_stat, gen, doWork);
@@ -216,7 +219,7 @@ void GenApplication::Run(StopVarType &doWork)
         SVTrafficGen gen(m_sv256Num, SV_TYPE::SV256);
 
         DPDK::PoolSetter(gen.GetSkeletonBuffer(), gen.GetSkeletonSize())
-                        .FillPackets(pool.Get());
+                        .FillPackets(pool.GetPtr());
 
         // Generate cycle with SV packets
         tx_packets_cycle< SVTrafficGen, &SVTrafficGen::AmendPacketSV256 >(conf, m_stat, gen, doWork);
