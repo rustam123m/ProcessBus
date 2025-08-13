@@ -78,6 +78,9 @@ int main(int argc, char *argv[])
         rte_exit(EXIT_FAILURE, "You can't use core 0 to generate/process BUSes!\n");
     }
 
+    // RT
+    init_linuxrt();
+
     // Start auxiliary thread: signals & statistics
     std::thread auxThread(auxiliary_thread);
 

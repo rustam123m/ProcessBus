@@ -62,7 +62,7 @@ static void tx_packets_cycle(TxCycleConfig &conf, GenAppStat &stat, GenClass &ge
     /* display_tx_units_info< typename GenClass::TxUnitArray >(txUnits); */
 
     std::cout << "\n\tStart main loop\n";
-    /* set_thread_priority(DEF_GENERATOR_PRIORITY); */
+    set_thread_priority(DEF_GENERATOR_PRIORITY);
 
     // Main cycle
     rte_mbuf* mbufs[BURST_SIZE] = { nullptr };
@@ -169,10 +169,10 @@ void GenApplication::DisplayStatistic()
 void GenApplication::Run(StopVarType &doWork)
 {
     // DPDK settings
-    const unsigned MBUF_NUM = 512 * 1024,
+    const unsigned MBUF_NUM = 2 * 512 * 1024,
                    CACHE_NUM = 64,
                    RX_DESC_NUM = 128,
-                   TX_DESC_NUM = 63 * 1024;
+                   TX_DESC_NUM = 64 * 1024 - 1;
 
     // Memory pool for skeletons
     DPDK::Mempool pool("bus_gen_pool", MBUF_NUM, CACHE_NUM);

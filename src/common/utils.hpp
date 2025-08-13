@@ -11,6 +11,8 @@
 
 #define ASM_MARKER(name) asm volatile("# MARKER: " #name)
 
+void init_linuxrt();
+
 void set_thread_name(const std::string &name);
 void set_thread_priority(int priority);
 void pin_thread_to_cpu(int cpu, int priority);

@@ -73,6 +73,9 @@ int main(int argc, char *argv[])
     argc -= retval;
     argv += retval;
 
+    // RT
+    init_linuxrt();
+
     if (rte_eth_dev_count_avail() == 0) {
         rte_exit(EXIT_FAILURE, "No available ports. Please, check port binding.\n");
     }
