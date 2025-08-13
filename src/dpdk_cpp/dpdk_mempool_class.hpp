@@ -10,6 +10,10 @@
 
 namespace DPDK
 {
+    /**
+     * @class Mempool
+     * @brief Representation of DPDK's pool
+     */
     class Mempool
     {
     public:
@@ -37,7 +41,7 @@ namespace DPDK
             }
         }
 
-        inline rte_mempool* Get() { return m_pool; }
+        inline rte_mempool* GetPtr() { return m_pool; }
 
         friend std::ostream& operator<<(std::ostream &out, const Mempool &obj) {
             out << "\tAvailable(mbuf): " << rte_mempool_avail_count(obj.m_pool) << "\n"

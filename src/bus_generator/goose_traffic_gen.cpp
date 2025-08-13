@@ -11,8 +11,7 @@
 /**
  * @note 
  */
-#define PLACEHOLDER                 "12345678"
-
+#define PLACEHOLDER            "12345678"
 const char *GOID_PATTERN     = "GOID" PLACEHOLDER;
 const char *GOCB_REF_PATTERN = "IED" PLACEHOLDER "LDName/LLN0$GO$GOCB";
 const char *DS_REF_PATTERN   = "IED" PLACEHOLDER "LDName/LLN0$DataSet";

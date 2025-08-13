@@ -18,7 +18,7 @@ RUN apt-get update && apt-get -y --no-install-recommends install \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Set gcc alternatives if needed
+# Set gcc alternatives 
 RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 100 \
     && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 100
 

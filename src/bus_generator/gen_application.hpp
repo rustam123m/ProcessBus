@@ -12,6 +12,7 @@ struct GenAppStat
 };
 
 /**
+ * @class GenApplication
  * @brief Main logic for bus generator app
  */
 class GenApplication

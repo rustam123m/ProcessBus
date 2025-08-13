@@ -132,6 +132,9 @@ namespace
             throw std::runtime_error("Link is still down after 10 sec...");
         }
 
+        // Link info
+        std::cout << eth << "\n";
+
         std::cout << "\n\tStart main loop with workers: " << workerNum << std::endl;
         /* set_thread_priority(DEF_PROCESS_PRIORITY); */
 
@@ -389,7 +392,7 @@ void RX_Application::Run(StopVarType &doWork)
     // Create Ethernet port
     uint16_t port_id = 0, queue_id = 0;
     DPDK::Port eth = DPDK::PortBuilder(port_id)
-                            .SetMemPool(pool.Get())
+                            .SetMemPool(pool.GetPtr())
                             .AdjustQueues(1, 1)
                             .SetDescriptors(RX_DESC_NUM, TX_DESC_NUM)
                             .Build();
