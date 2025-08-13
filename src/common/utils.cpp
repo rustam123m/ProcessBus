@@ -1,6 +1,44 @@
 #include "utils.hpp"
 
+#include <malloc.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+
 #include <iostream>
+
+void init_linuxrt()
+{
+    if (mlockall(MCL_CURRENT | MCL_FUTURE) == -1) {
+        std::cerr << "Can't mlockall memory!\n";
+    }
+    mallopt(M_MMAP_MAX, 0);
+    mallopt(M_TRIM_THRESHOLD, -1);
+
+    /* Latency trick
+     * if the file /dev/cpu_dma_latency exists,
+     * open it and write a zero into it. This will tell
+     * the power management system not to transition to
+     * a high cstate (in fact, the system acts like idle=poll)
+     * When the fd to /dev/cpu_dma_latency is closed, the behavior
+     * goes back to the system default.
+     *
+     * Documentation/power/pm_qos_interface.txt
+     */
+    struct stat dmafile = {};
+    if (stat("/dev/cpu_dma_latency", &dmafile) == 0) {
+        static int s_latency_fd = 0;
+
+        s_latency_fd = open("/dev/cpu_dma_latency", O_RDWR);
+        if (s_latency_fd != -1) {
+            uint32_t value = 0;
+            int ret = write(s_latency_fd, &value, sizeof(value));
+            if (ret == 0) {
+                close(s_latency_fd);
+            }
+        }
+    }
+}
 
 void set_thread_name(const std::string &name)
 {

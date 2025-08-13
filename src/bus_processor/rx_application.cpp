@@ -23,7 +23,7 @@ namespace
         }
 
         // CPU core by DPDK's cmd
-        /* set_thread_priority(DEF_WORKER_PRIORITY); */
+        set_thread_priority(DEF_WORKER_PRIORITY);
         ASM_MARKER(lcore_processing);
 
         // Pipeline definition
@@ -62,8 +62,11 @@ namespace
             throw std::runtime_error("Link is still down after 10 sec...");
         }
 
+        // Link info
+        std::cout << eth << "\n";
+
         std::cout << "\n\tStart main loop" << std::endl;
-        /* set_thread_priority(DEF_PROCESS_PRIORITY); */
+        set_thread_priority(DEF_PROCESS_PRIORITY);
         ASM_MARKER(signle_core_processing);
 
         // Pipeline definition
@@ -136,7 +139,7 @@ namespace
         std::cout << eth << "\n";
 
         std::cout << "\n\tStart main loop with workers: " << workerNum << std::endl;
-        /* set_thread_priority(DEF_PROCESS_PRIORITY); */
+        set_thread_priority(DEF_PROCESS_PRIORITY);
 
         // Workers' queues
         struct {
@@ -383,7 +386,7 @@ void RX_Application::Run(StopVarType &doWork)
     // DPDK settings
     const unsigned MBUF_NUM = 4 * 512 * 1024,
                    CACHE_NUM = 64,
-                   RX_DESC_NUM = 63 * 1024,
+                   RX_DESC_NUM = 64 * 1024 - 1,
                    TX_DESC_NUM = 128;
 
     // Create memory pool
