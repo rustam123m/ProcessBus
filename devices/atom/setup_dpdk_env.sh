@@ -5,14 +5,17 @@
 
 echo 4096 > /proc/sys/vm/nr_hugepages
 
-mkdir -p /mnt/bus_gen /mnt/bus_proc
+mkdir -p /mnt/bus_gen /mnt/bus_proc /mnt/delay_meter /mnt/redirect1 /mnt/redirect2
 mount -t hugetlbfs nodev /mnt/bus_gen
 mount -t hugetlbfs nodev /mnt/bus_proc
+mount -t hugetlbfs nodev /mnt/delay_meter
+mount -t hugetlbfs nodev /mnt/redirect1
+mount -t hugetlbfs nodev /mnt/redirect2
 
 modprobe vfio
 modprobe vfio-pci
 
 cd /home/pulo/pbus/
-./dpdk-devbind.py --bind=vfio-pci 0000:0c:00.0 0000:0b:00.0 0000:08:00.0
+./dpdk-devbind.py --bind=vfio-pci 0000:0c:00.0 0000:0b:00.0 0000:04:00.0 0000:05:00.0 0000:06:00.0 0000:07:00.0 0000:08:00.0
 ./dpdk-devbind.py --status
 

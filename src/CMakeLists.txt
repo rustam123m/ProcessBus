@@ -9,6 +9,7 @@ include_directories(
 
 add_subdirectory(bus_generator/)
 add_subdirectory(bus_processor/)
+add_subdirectory(tools/)
 
 if (BUILD_TESTS)
 	add_subdirectory(tests/)
