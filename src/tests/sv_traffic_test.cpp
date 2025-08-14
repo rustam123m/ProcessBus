@@ -89,8 +89,31 @@ private:
     uint32_t    m_crev = 1;
 };
 
-TEST(BusGenerator, SVTrafficBasicUsage)
+TEST(SVTrafficGen, BasicUsage)
 {
+    // SV80
+    {
+        SVTrafficGen gen(1, SV_TYPE::SV80);
+
+        SVStreamPassport passport;
+        SVStreamState state;
+        int retval = ProcessBusParser::parse_sv_packet(gen.GetSkeletonBuffer(),
+                                                       gen.GetSkeletonSize(),
+                                                       passport, state);
+        ASSERT_EQ(retval, 0) << "Can't parse SV80 packet";
+    }
+
+    // SV256
+    {
+        SVTrafficGen gen(1, SV_TYPE::SV256);
+
+        SVStreamPassport passport;
+        SVStreamState state;
+        int retval = ProcessBusParser::parse_sv_packet(gen.GetSkeletonBuffer(),
+                                                       gen.GetSkeletonSize(),
+                                                       passport, state);
+        ASSERT_EQ(retval, 0) << "Can't parse SV256 packet";
+    }
 }
 
 TEST(SVFastParser, BasicUsage)

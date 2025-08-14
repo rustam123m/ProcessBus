@@ -114,7 +114,7 @@ public:
 
     inline void ProcessState(const SVStreamPassport &pass,
                              const SVStreamState &state) {
-        if ((state.smpCnt != (m_smpCnt + 1)) && (state.smpCnt != 0)) {
+        if ((state.smpCnt != (m_smpCnt + pass.num)) && (state.smpCnt != 0)) {
             ++m_errSmpCnt;
             /*
             std::cout << "Wrong smpCnt: " << m_smpCnt
