@@ -4,13 +4,16 @@
 
 namespace
 {
-    inline int decode_asn1_len(const uint8_t* buffer, size_t& pos)
+    inline int decode_asn1_len(const uint8_t* buffer, size_t *pos)
     {
-        int lenByte = buffer[pos++];
+        int lenByte = buffer[*pos];
+        ++(*pos);
+
         if (lenByte & 0x80) {
             int lenBytes = lenByte & 0x7F, length = 0;
             for (int i=0;i<lenBytes;++i) {
-                length = (length << 8) | buffer[pos++];
+                length = (length << 8) | buffer[*pos];
+                ++(*pos);
             }
             return length;
         }
@@ -79,12 +82,12 @@ int ProcessBusParser::parse_goose_packet(const uint8_t *buffer, int size,
     if (buffer[pos++] != 0x61) {
         return -3;
     }
-    int pduSize = decode_asn1_len(buffer, pos);
+    int pduSize = decode_asn1_len(buffer, &pos);
 
     bool found_gocbref = false, found_dataset = false, found_goid = false;
     while (pos < size) {
         uint8_t tag = buffer[pos++];
-        int itemSize = decode_asn1_len(buffer, pos);
+        int itemSize = decode_asn1_len(buffer, &pos);
         if (pos + itemSize > size || itemSize == 0) {
             return -3;
         }
@@ -131,12 +134,12 @@ int ProcessBusParser::parse_goose_packet(const uint8_t *buffer, int size,
         case 0x31: // SET
             for (size_t end = pos + itemSize; pos < end;) {
                 uint8_t innerTag = buffer[pos++];
-                pos += decode_asn1_len(buffer, pos);
+                pos += decode_asn1_len(buffer, &pos);
             }
             continue;
         case 0xA0: // Context-specific 0
         case 0xA1: // Context-specific 1
-            pos += decode_asn1_len(buffer, pos);
+            pos += decode_asn1_len(buffer, &pos);
             continue;
         default:
             break;
@@ -175,7 +178,7 @@ int ProcessBusParser::parse_sv_packet(const uint8_t *buffer, int size,
     if (pos >= size || buffer[pos++] != 0x60) {
         return -3;
     }
-    ++pos;
+    decode_asn1_len(buffer, &pos);
 
     // Parse noASDU (tag 0x80)
     if (pos + 3 <= size && buffer[pos] == 0x80) {
@@ -187,7 +190,7 @@ int ProcessBusParser::parse_sv_packet(const uint8_t *buffer, int size,
     if (pos >= size || buffer[pos++] != 0xa2) {
         return -4;
     }
-    ++pos;
+    decode_asn1_len(buffer, &pos);
 
     // ASDU (tag 0x30)
     if (pos >= size || buffer[pos++] != 0x30) {
