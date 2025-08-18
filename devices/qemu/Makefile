@@ -40,6 +40,8 @@ install: ${DISRT_ISO_FILE} ${QEMU_HARDDRIVE}
 # KERN_DRIVER="igb"
 # KERN_DRIVER="virtio-net-pci"
 KERN_DRIVER="virtio-net-pci,disable-legacy=on,iommu_platform=on"
+# -nographic
+# -serial telnet:127.0.0.1:5555,server,nowait
 run: ${QEMU_HARDDRIVE}
 	sudo qemu-system-x86_64 \
 		-enable-kvm \

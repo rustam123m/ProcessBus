@@ -1,7 +1,9 @@
 3rdparty/
 devices/orangepi3b/openwrt
+**/pbus/**
 build/
 install/
+src/playground/
 tmp/
 
 *.img
@@ -10,6 +12,7 @@ tmp/
 *.gz
 *.qcow2
 *.iso
+.*
 
 tags
 

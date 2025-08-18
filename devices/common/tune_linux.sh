@@ -1,4 +1,4 @@
-#/bin/bash
+#!/bin/bash
 # Kernel options:
 # intel_iommu=on iommu=pt isolcpus=1-12 rcu_nocbs=1-12 nohz_full=1-12
 # housekeeping=0 rcutree.kthread_prio=95 irqaffinity=0 irqpoll idle=poll nosoftlockup
@@ -59,7 +59,7 @@ for thread_name in "${!kernel_threads[@]}"; do
     for pid in $pids; do
         chrt --$policy -p $priority $pid
 
-        echo "Set priority for: $thread_name($pid) to $priority($policy)"
+        #echo "Set priority for: $thread_name($pid) to $priority($policy)"
     done
 done
 

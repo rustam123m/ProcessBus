@@ -5,12 +5,13 @@
 
 echo 4096 > /proc/sys/vm/nr_hugepages
 
-mkdir -p /mnt/bus_gen /mnt/bus_proc /mnt/delay_meter /mnt/redirect1 /mnt/redirect2
-mount -t hugetlbfs nodev /mnt/bus_gen
-mount -t hugetlbfs nodev /mnt/bus_proc
-mount -t hugetlbfs nodev /mnt/delay_meter
-mount -t hugetlbfs nodev /mnt/redirect1
-mount -t hugetlbfs nodev /mnt/redirect2
+mount_points=(/mnt/bus_gen /mnt/bus_proc /mnt/delay_meter /mnt/redirect1 /mnt/redirect2)
+
+# Create directories and mount each
+for mount_point in "${mount_points[@]}"; do
+    mkdir -p "$mount_point"
+    mount -t hugetlbfs nodev "$mount_point"
+done
 
 modprobe vfio
 modprobe vfio-pci
