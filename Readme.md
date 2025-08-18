@@ -47,7 +47,7 @@ The script `ci/build.sh` builds:
 
 ## How to Run
 
-[Running with Qemu](docs/Running with QEMU.md)
+[Running with Qemu](docs/Running_with_QEMU.md)
 
 There are special scripts(qemu): `run_generator.sh` and `run_processor.sh`.
 
@@ -75,7 +75,7 @@ Processing packets:
 
 ## Performance metrics
 
-[Results in nonRT mode](docs/Results in nonRT.md)
+[Results in nonRT mode](docs/Results_in_nonRT.md)
 
 ## License
 
