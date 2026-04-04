@@ -37,3 +37,29 @@ TEST(AppIdContainer, BasicUsage)
     }
 }
 
+TEST(AppIdContainer, MaxAppId)
+{
+    struct Key
+    {
+        uint16_t appid = 0;
+        bool operator==(const Key &o) const { return appid == o.appid; }
+    };
+    using Value = int;
+
+    AppIdContainer< Key, Value > map;
+
+    Key maxKey{.appid = 65535};
+    map.insert(maxKey, 42);
+
+    auto it = map.find(maxKey);
+    ASSERT_NE(it, map.end());
+    ASSERT_EQ(it->second, 42);
+
+    Key zeroKey{.appid = 0};
+    map.insert(zeroKey, 99);
+
+    auto it0 = map.find(zeroKey);
+    ASSERT_NE(it0, map.end());
+    ASSERT_EQ(it0->second, 99);
+}
+

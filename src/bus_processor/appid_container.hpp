@@ -47,7 +47,7 @@ public:
     }
 
 private:
-    std::array< size_t, USHRT_MAX > m_register;
+    std::array< size_t, USHRT_MAX + 1 > m_register;
     std::vector< Value >            m_values;
 };
 

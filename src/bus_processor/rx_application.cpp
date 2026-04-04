@@ -125,6 +125,10 @@ namespace
             ++wIndex;
         }
         const unsigned workerNum = lcoreWorker.size();
+        if (workerNum == 0 || (workerNum & (workerNum - 1)) != 0) {
+            throw std::runtime_error(
+                "Worker count must be a power of 2, got: " + std::to_string(workerNum));
+        }
 
         // Start NIC port
         eth.SetAllMulticast();

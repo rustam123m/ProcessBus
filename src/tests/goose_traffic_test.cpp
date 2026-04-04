@@ -274,6 +274,33 @@ TEST(GooseFastParser, BasicUsage)
     ASSERT_EQ(passport.num, goose.GetNumEntries()) << passport;
 }
 
+TEST(GooseFastParser, Timestamp4Bytes)
+{
+    // Minimal non-VLAN GOOSE with a 4-byte timestamp = 0xAABBCCDD
+    uint8_t packet[] = {
+        0x01, 0x0C, 0xCD, 0x04, 0x00, 0x00,               // DMAC
+        0xF0, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5,               // SMAC
+        0x88, 0xB8,                                         // EtherType (GOOSE)
+        0x00, 0x01, 0x00, 0x30, 0x00, 0x00, 0x00, 0x00,    // APPID, Len, Res1, Res2
+        0x61, 0x28,                                         // PDU tag + length(40)
+        0x80, 0x04, 0x54, 0x45, 0x53, 0x54,                // gocbRef = "TEST"
+        0x82, 0x04, 0x54, 0x45, 0x53, 0x54,                // datSet  = "TEST"
+        0x83, 0x04, 0x54, 0x45, 0x53, 0x54,                // goID    = "TEST"
+        0x84, 0x04, 0xAA, 0xBB, 0xCC, 0xDD,                // timestamp (4 bytes)
+        0x85, 0x01, 0x01,                                   // stNum = 1
+        0x86, 0x01, 0x00,                                   // sqNum = 0
+        0x8A, 0x01, 0x01,                                   // numDatSetEntries = 1
+        0xAB, 0x05, 0x83, 0x01, 0x00, 0x83, 0x01,          // allData (pad to 64)
+    };
+    static_assert(sizeof(packet) == 64);
+
+    GoosePassport passport;
+    GooseState state;
+    int retval = ProcessBusParser::parse_goose_packet(packet, sizeof(packet), passport, state);
+    ASSERT_EQ(retval, 0);
+    ASSERT_EQ(state.timestamp, 0xAABBCCDD) << "4-byte timestamp must not include adjacent bytes";
+}
+
 TEST(GooseFastParser, GetProtoType_VLAN)
 {
     uint8_t packet[MAX_GOOSE_PACKET_SIZE] = { 0 };

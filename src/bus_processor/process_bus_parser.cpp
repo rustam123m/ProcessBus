@@ -108,8 +108,10 @@ int ProcessBusParser::parse_goose_packet(const uint8_t *buffer, int size,
             found_goid = true;
             break;
         case 0x84:
-            if(itemSize == 4 || itemSize == 6) {
-                state.timestamp = NET_TO_CPU_U64(buffer + pos);
+            if (itemSize >= 4 && itemSize <= 8) {
+                uint64_t ts = NET_TO_CPU_U64(buffer + pos);
+                ts >>= (8 - itemSize) * 8;
+                state.timestamp = ts;
             }
             break;
         case 0x85:
@@ -196,13 +198,13 @@ int ProcessBusParser::parse_sv_packet(const uint8_t *buffer, int size,
     if (pos >= size || buffer[pos++] != 0x30) {
         return -5;
     }
-    ++pos;
+    decode_asn1_len(buffer, &pos);
 
     // Parse ASDU fields
     while (pos < size) {
         uint8_t tag = buffer[pos++];
-        int length = buffer[pos++]; // Simplified length
-        if (pos + length > size) {
+        int length = decode_asn1_len(buffer, &pos);
+        if (pos + length > size || length <= 0) {
             break;
         }
 
