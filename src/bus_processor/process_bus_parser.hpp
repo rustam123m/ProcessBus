@@ -32,23 +32,23 @@ public:
             // VLAN
             if (buffer[16] == 0x88 && buffer[17] == 0xBA) {
                 // SV
-                *appid = get_appid(buffer + 18);
+                *appid = get_appid(buffer);
                 return BUS_PROTO_SV;
             }
             if (buffer[16] == 0x88 && buffer[17] == 0xB8) {
                 // GOOSE
-                *appid = get_appid(buffer + 18);
+                *appid = get_appid(buffer);
                 return BUS_PROTO_GOOSE;
             }
         }
         if (buffer[12] == 0x88 && buffer[13] == 0xBA) {
             // SV without VLAN
-            *appid = get_appid(buffer + 14);
+            *appid = RTE_STATIC_BSWAP16(*(uint16_t *)(buffer + 14));
             return BUS_PROTO_SV;
         }
         if (buffer[12] == 0x88 && buffer[13] == 0xB8) {
             // GOOSE without VLAN
-            *appid = get_appid(buffer + 14);
+            *appid = RTE_STATIC_BSWAP16(*(uint16_t *)(buffer + 14));
             return BUS_PROTO_GOOSE;
         }
         return NON_BUS_PROTO;

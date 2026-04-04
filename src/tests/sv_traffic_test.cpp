@@ -116,6 +116,19 @@ TEST(SVTrafficGen, BasicUsage)
     }
 }
 
+TEST(SVFastParser, GetProtoType_VLAN)
+{
+    uint8_t packet[MAX_SV_PACKET_SIZE] = { 0 };
+    SVMakerByLib sv;
+    size_t size = sv.SetAppID(0x5678).MakePacket(packet);
+    ASSERT_GT(size, 0u);
+
+    unsigned appid = 0;
+    BUS_PROTO type = ProcessBusParser::get_proto_type(packet, &appid);
+    ASSERT_EQ(type, BUS_PROTO_SV);
+    ASSERT_EQ(appid, 0x5678) << "get_proto_type returned wrong APPID for VLAN SV";
+}
+
 TEST(SVFastParser, BasicUsage)
 {
     uint8_t packet[MAX_SV_PACKET_SIZE] = { 0 };

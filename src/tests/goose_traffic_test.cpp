@@ -274,6 +274,35 @@ TEST(GooseFastParser, BasicUsage)
     ASSERT_EQ(passport.num, goose.GetNumEntries()) << passport;
 }
 
+TEST(GooseFastParser, GetProtoType_VLAN)
+{
+    uint8_t packet[MAX_GOOSE_PACKET_SIZE] = { 0 };
+    GooseMakerByLib goose;
+    size_t size = goose.SetAppID(0x1234).MakePacket(packet);
+    ASSERT_GT(size, 0u);
+
+    unsigned appid = 0;
+    BUS_PROTO type = ProcessBusParser::get_proto_type(packet, &appid);
+    ASSERT_EQ(type, BUS_PROTO_GOOSE);
+    ASSERT_EQ(appid, 0x1234) << "get_proto_type returned wrong APPID for VLAN GOOSE";
+}
+
+TEST(GooseFastParser, GetProtoType_NonVLAN)
+{
+    // Non-VLAN GOOSE: EtherType 0x88B8 at bytes 12-13, APPID 0x0001 at bytes 14-15
+    uint8_t packet[] = {
+        0x01, 0x0C, 0xCD, 0x04, 0x00, 0x00, 0xF0, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5,
+        0x88, 0xB8, 0x00, 0x01, 0x00, 0xB1, 0x00, 0x00, 0x00, 0x00, 0x61, 0x81,
+        0xA6, 0x80, 0x1E, 0x49, 0x45, 0x44, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30,
+        0x30, 0x31
+    };
+
+    unsigned appid = 0;
+    BUS_PROTO type = ProcessBusParser::get_proto_type(packet, &appid);
+    ASSERT_EQ(type, BUS_PROTO_GOOSE);
+    ASSERT_EQ(appid, 0x0001) << "get_proto_type returned wrong APPID for non-VLAN GOOSE";
+}
+
 TEST(GooseFastParser, RealPacket)
 {
     uint8_t packet[] = {
