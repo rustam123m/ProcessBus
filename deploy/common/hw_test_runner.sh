@@ -72,6 +72,20 @@ else
 fi
 echo "Processor started (PID=$PROC_PID)"
 
+# Verify both started (give them a moment to load)
+sleep 2
+if ! kill -0 "$GEN_PID" 2>/dev/null; then
+    echo "ERROR: Generator failed to start. Check $GEN_LOG"
+    cat "$GEN_LOG"
+    exit 1
+fi
+if ! kill -0 "$PROC_PID" 2>/dev/null; then
+    echo "ERROR: Processor failed to start. Check $PROC_LOG"
+    cat "$PROC_LOG"
+    kill -INT "$GEN_PID" 2>/dev/null || true
+    exit 1
+fi
+
 # Wait for test duration
 echo "Running for ${DURATION}s..."
 sleep "$DURATION"

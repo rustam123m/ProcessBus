@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # ./run_generator.sh --goose 10,100000
 # ./run_processor.sh --goose 10
 #

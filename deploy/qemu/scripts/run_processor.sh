@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 NIC_PCI_ADDR="0000:00:05.0"
 

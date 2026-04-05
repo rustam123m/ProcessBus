@@ -15,8 +15,10 @@ USER=user
 HOST=192.168.21.2
 REMOTE_DIR=/home/user/
 
-# Rebuild
-$REPO_DIR/ci/build.sh --rebuild
+# Rebuild (skip with --no-build)
+if [ "${1}" != "--no-build" ]; then
+    $REPO_DIR/ci/build.sh --rebuild
+fi
 
 # Create a folder with all files
 rm -rf $PBUS_FILES
@@ -32,6 +34,6 @@ for dir in "${DIRECTORIES[@]}"; do
     cp -rp $dir $PBUS_FILES
 done
 
-# Send all files to VM
-sshpass -p 123 scp -o StrictHostKeyChecking=no -rp "$PBUS_FILES/" "${USER}@${HOST}:${REMOTE_DIR}"
+# Send all files to VM (requires ssh key: ssh-copy-id user@host)
+scp -o StrictHostKeyChecking=no -rp "$PBUS_FILES/" "${USER}@${HOST}:${REMOTE_DIR}"
 

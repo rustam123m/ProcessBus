@@ -22,8 +22,8 @@ DO_DEPLOY=0
 RUN_ALL=0
 SCENARIO_FILTER=""
 
-SSH_CMD="sshpass -p $PASS ssh -o StrictHostKeyChecking=no ${USER}@${HOST}"
-SCP_CMD="sshpass -p $PASS scp -o StrictHostKeyChecking=no"
+SSH_CMD="ssh -o StrictHostKeyChecking=no ${USER}@${HOST}"
+SCP_CMD="scp -o StrictHostKeyChecking=no"
 
 while [[ "$#" -gt 0 ]]; do
     case $1 in
@@ -31,8 +31,8 @@ while [[ "$#" -gt 0 ]]; do
         --all)      RUN_ALL=1 ;;
         --deploy)   DO_DEPLOY=1 ;;
         --host)     HOST="$2"; shift
-                    SSH_CMD="sshpass -p $PASS ssh -o StrictHostKeyChecking=no ${USER}@${HOST}"
-                    SCP_CMD="sshpass -p $PASS scp -o StrictHostKeyChecking=no" ;;
+                    SSH_CMD="ssh -o StrictHostKeyChecking=no ${USER}@${HOST}"
+                    SCP_CMD="scp -o StrictHostKeyChecking=no" ;;
         *)          echo "Usage: $0 [--scenario <name>] [--all] [--deploy] [--host <ip>]"; exit 1 ;;
     esac
     shift
@@ -74,7 +74,7 @@ run_scenario() {
     fi
 
     # Run on remote
-    $SSH_CMD "cd $REMOTE_DIR && bash hw_test_runner.sh $runner_args" > /dev/null 2>&1
+    $SSH_CMD "cd $REMOTE_DIR && sudo bash hw_test_runner.sh $runner_args" > /dev/null 2>&1
 
     # Fetch logs
     $SCP_CMD "${USER}@${HOST}:/tmp/gen.log" "$result_dir/generator.log" 2>/dev/null

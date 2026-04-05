@@ -1,8 +1,9 @@
-DISRT_ISO_FILE=debian-testing-amd64-netinst.iso
-LINUX_DISTR_ISO=https://cdimage.debian.org/cdimage/weekly-builds/amd64/iso-cd/debian-testing-amd64-netinst.iso
+DISRT_ISO_FILE=debian-13.4.0-amd64-netinst.iso
+LINUX_DISTR_ISO=https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/${DISRT_ISO_FILE}
+
 QEMU_HARDDRIVE=qemu-debian-harddrive.qcow2
 
-.PHONY: fetch hard interfaces install run
+.PHONY: fetch hard interfaces bridge internet install run
 
 all: fetch hard interfaces install run
 
@@ -22,6 +23,18 @@ interfaces:
 	}
 	sudo ip addr add 192.168.21.1/24 dev vm_tap0
 	sudo ip link set dev vm_tap0 up
+
+bridge:
+	sudo ip link add br_pbus type bridge 2>/dev/null || true
+	sudo ip link set vm_tap1 master br_pbus
+	sudo ip link set vm_tap2 master br_pbus
+	sudo ip link set br_pbus up
+
+internet:
+	sudo sysctl -w net.ipv4.ip_forward=1
+	sudo iptables -t nat -A POSTROUTING -s 192.168.21.0/24 -o wlp3s0 -j MASQUERADE
+	sudo iptables -I FORWARD 1 -i vm_tap0 -o wlp3s0 -j ACCEPT
+	sudo iptables -I FORWARD 2 -i wlp3s0 -o vm_tap0 -m state --state RELATED,ESTABLISHED -j ACCEPT
 
 install: ${DISRT_ISO_FILE} ${QEMU_HARDDRIVE}
 	sudo qemu-system-x86_64 \
