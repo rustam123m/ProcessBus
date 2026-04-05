@@ -12,7 +12,7 @@ INSTALL_DIR="$REPO_DIR/install/"
 PBUS_FILES="$SCRIPT_PATH/pbus/"
 
 USER=user
-HOST=192.168.13.3
+HOST=192.168.21.2
 REMOTE_DIR=/home/user/
 
 # Rebuild
@@ -24,8 +24,9 @@ mkdir $PBUS_FILES
 # Collect
 DIRECTORIES=(
     "$REPO_DIR/install/*"
-    "$REPO_DIR/devices/common/*"
-    "$REPO_DIR/devices/qotom_server/scripts/*"
+    "$REPO_DIR/deploy/common/tune_linux.sh"
+    "$REPO_DIR/deploy/common/hw_test_runner.sh"
+    "$REPO_DIR/deploy/qemu/scripts/*"
 )
 for dir in "${DIRECTORIES[@]}"; do
     cp -rp $dir $PBUS_FILES

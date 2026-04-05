@@ -17,7 +17,7 @@
 
 4. Deploy to a QEMU VM(it uploads all binaries and scripts to run into **/home/user/pbus/**):
 
-    /ProcessBus/devices/qemu/deploy.sh 
+    /ProcessBus/deploy/qemu/deploy.sh 
 
 ## Requirements for QEMU environment
 
@@ -26,7 +26,7 @@
 
 ## Create QEMU VM with Debian 
 
-**There is a special devices/qemu/Makefile with targets:**
+**There is a special deploy/qemu/Makefile with targets:**
 
 1. **fetch** - installs QEMU packages and to download the Debian iso image.
 2. **hard** - create a harddrive for the VM with QEMU.
@@ -44,10 +44,10 @@
 
 ## Running packet generator or processor
 
-1. make run # runs Debian VM using devices/qemu/Makefile
+1. make run # runs Debian VM using deploy/qemu/Makefile
 2. Inside the VM, some preparations are needed:
-    - Detach NIC interfaces from the Linux kernel: **devices/qemu/scripts/setup_dpdk_env.sh**
-    - Tune RT with a special script: **devices/tune_linux.sh**
-    - Run the generator with script: **devices/qemu/scripts/run_generator.sh**
-    - Run the processor with script: **devices/qemu/scripts/run_processor.sh**
+    - Detach NIC interfaces from the Linux kernel: **deploy/qemu/scripts/setup_dpdk_env.sh**
+    - Tune RT with a special script: **deploy/tune_linux.sh**
+    - Run the generator with script: **deploy/qemu/scripts/run_generator.sh**
+    - Run the processor with script: **deploy/qemu/scripts/run_processor.sh**
 

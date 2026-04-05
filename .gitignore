@@ -1,5 +1,6 @@
 3rdparty/
-devices/orangepi3b/openwrt
+deploy/orangepi3b/openwrt
+deploy/*/results/
 **/pbus/**
 build/
 install/
