@@ -23,6 +23,14 @@ jobs:
             --user $(id -u):$(id -g) \
             pbus-build bash ci/build.sh
 
+      - name: Run unit tests
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            --user $(id -u):$(id -g) \
+            pbus-build ./build/src/tests/unit_tests
+
       - name: Prepare artifact name
         id: prep
         env:

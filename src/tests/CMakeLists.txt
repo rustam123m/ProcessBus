@@ -1,33 +1,38 @@
-set(TARGET_NAME unit_tests)
-
-add_executable(${TARGET_NAME}
+# Common sources shared by both test binaries
+set(TEST_COMMON_SOURCES
     ../bus_generator/goose_traffic_gen.hpp
     ../bus_generator/goose_traffic_gen.cpp
-
-    ../bus_generator/sv_traffic_gen.hpp
-    ../bus_generator/sv_traffic_gen.cpp
-
     ../bus_processor/process_bus_parser.hpp
     ../bus_processor/process_bus_parser.cpp
+)
 
+# Unit tests (no AF_PACKET required, run in CI)
+set(UNIT_TEST unit_tests)
+add_executable(${UNIT_TEST}
+    ${TEST_COMMON_SOURCES}
     goose_traffic_test.cpp
-    sv_traffic_test.cpp
     appid_container_test.cpp
     pipeline_test.cpp
-
     main.cpp
 )
-target_link_libraries(${TARGET_NAME}
-    PRIVATE
-    gtest
-    gmock
-    gtest_main
+target_link_libraries(${UNIT_TEST} PRIVATE gtest gmock gtest_main)
+setup_dpdk(${UNIT_TEST})
+setup_libiec61850(${UNIT_TEST})
+add_test(NAME ${UNIT_TEST} COMMAND ${UNIT_TEST})
+install(TARGETS ${UNIT_TEST} DESTINATION bin)
+
+# Integration tests (require AF_PACKET / sudo)
+set(INTEGRATION_TEST integration_tests)
+add_executable(${INTEGRATION_TEST}
+    ${TEST_COMMON_SOURCES}
+    ../bus_generator/sv_traffic_gen.hpp
+    ../bus_generator/sv_traffic_gen.cpp
+    goose_integration_test.cpp
+    sv_integration_test.cpp
+    main.cpp
 )
-setup_dpdk(${TARGET_NAME})
-setup_libiec61850(${TARGET_NAME})
-
-# CTest
-add_test(NAME ${TARGET_NAME} COMMAND ${TARGET_NAME})
-setup_libiec61850(${TARGET_NAME})
-install(TARGETS ${TARGET_NAME} DESTINATION bin)
-
+target_link_libraries(${INTEGRATION_TEST} PRIVATE gtest gmock gtest_main)
+setup_dpdk(${INTEGRATION_TEST})
+setup_libiec61850(${INTEGRATION_TEST})
+add_test(NAME ${INTEGRATION_TEST} COMMAND ${INTEGRATION_TEST})
+install(TARGETS ${INTEGRATION_TEST} DESTINATION bin)

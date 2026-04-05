@@ -6,8 +6,8 @@
 #include <cstdint>
 #include <climits>
 
-/**
- * @brief Container for storing GOOSE/SV elements with unique a AppID
+/*
+ * Container for storing GOOSE/SV elements with a unique AppID
  *
  * Interface similar to std::unordered_map
  */

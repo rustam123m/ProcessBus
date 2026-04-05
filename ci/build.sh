@@ -19,7 +19,7 @@ OPT_REBUILD=0
 
 function usage()
 {
-    echo "Usage: $0 [--update=0/1] [--dpdk=0/1] [--pbus=0/1] [--rebuild]"
+    echo "Usage: $0 [--update=0/1] [--dpdk=0/1] [--pbus=0/1] [--rebuild] [--check] [--setup] [--shell]"
     exit 1
 }
 
@@ -33,6 +33,21 @@ function prepare_sources()
     wget -q -O "$MBEDTLS_DIR/mbedtls.tar.gz" https://github.com/Mbed-TLS/mbedtls/archive/refs/tags/v3.6.0.tar.gz
     tar xzf "$MBEDTLS_DIR/mbedtls.tar.gz" -C "$MBEDTLS_DIR"
     rm "$MBEDTLS_DIR/mbedtls.tar.gz"
+
+    # Apply patches to libiec61850
+    local lib_dir="$REPO_DIR/3rdparty/libiec61850"
+    local patch_dir="$SCRIPT_PATH/patches"
+    if [ -d "$patch_dir" ]; then
+        for patch in "$patch_dir"/*.patch; do
+            [ -f "$patch" ] || continue
+            if git -C "$lib_dir" apply --check "$patch" 2>/dev/null; then
+                echo "Applying: $(basename $patch)"
+                git -C "$lib_dir" apply "$patch"
+            else
+                echo "Already applied: $(basename $patch)"
+            fi
+        done
+    fi
 }
 
 function build_dpdk()
@@ -72,7 +87,7 @@ function rebuild_and_install()
     cmake --build "$BUILD_DIR"
     cmake --install "$BUILD_DIR"
 
-    # DPDP's stuff
+    # DPDK's stuff
     cp "$REPO_DIR"/3rdparty/dpdk/usertools/dpdk-devbind.py "$INSTALL_DIR"
 }
 
@@ -140,6 +155,16 @@ while [[ "$#" -gt 0 ]]; do
             ;;
         --check)
             check_code
+            exit 0
+            ;;
+        --setup)
+            podman build -f "$SCRIPT_PATH/Dockerfile.debian" --tag pbus_builder
+            exit 0
+            ;;
+        --shell)
+            podman run -it --rm --cap-add=NET_RAW \
+                -v "$(realpath "$REPO_DIR"):/ProcessBus/:Z" \
+                --userns=keep-id --name pbus_builder pbus_builder /bin/bash
             exit 0
             ;;
         *) usage;;
