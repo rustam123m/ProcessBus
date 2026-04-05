@@ -49,7 +49,7 @@ struct DelayStatistic
     uint64_t rxPtkNum = 0;
     uint64_t sumAllDeltas = 0;
     uint64_t maxDeltaClk = 0;
-    uint64_t minDeltaClk = 0;
+    uint64_t minDeltaClk = UINT64_MAX;
     uint64_t prevCycleClk = 0;
 
     inline void print() {

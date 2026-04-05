@@ -78,6 +78,8 @@ void GooseTrafficGen::MakeSkeletonPacket(unsigned sigNum)
                         m_skeleton, MAX_GOOSE_PACKET_SIZE, &m_skeletonSize
                     );
         if (retval == -1) {
+            GoosePublisher_destroy(publisher);
+            LinkedList_destroy(dataSetValues);
             throw std::invalid_argument("Can't generate GOOSE message with libiec61850 "
                                         + std::to_string(retval));
         }
@@ -88,18 +90,19 @@ void GooseTrafficGen::MakeSkeletonPacket(unsigned sigNum)
 
 		// Offsets
 		GooseMessageOffsets offs;
-		if (GooseReceiver_getMessageOffsets(m_skeleton, m_skeletonSize, &offs)) {
-			m_offsets[GOOSE_APPID_OFFSET] = offs.appid;
-			m_offsets[GOOSE_GOID_OFFSET] = offs.goid;
-			m_offsets[GOOSE_GOCB_REF_OFFSET] = offs.gocb;
-			m_offsets[GOOSE_DS_REF_OFFSET] = offs.dataset;
-            m_offsets[GOOSE_TIMESTAMP_OFFSET] = offs.timestamp;
-			m_offsets[GOOSE_SQ_NUM_OFFSET] = offs.sqNum;
-			m_offsets[GOOSE_ST_NUM_OFFSET] = offs.stNum;
-			m_offsets[GOOSE_D1_OFFSET] = offs.value;
-		} else {
+		if (!GooseReceiver_getMessageOffsets(m_skeleton, m_skeletonSize, &offs)) {
+            GoosePublisher_destroy(publisher);
+            LinkedList_destroy(dataSetValues);
             throw std::invalid_argument("Can't find GOOSE's offsets");
         }
+        m_offsets[GOOSE_APPID_OFFSET] = offs.appid;
+        m_offsets[GOOSE_GOID_OFFSET] = offs.goid;
+        m_offsets[GOOSE_GOCB_REF_OFFSET] = offs.gocb;
+        m_offsets[GOOSE_DS_REF_OFFSET] = offs.dataset;
+        m_offsets[GOOSE_TIMESTAMP_OFFSET] = offs.timestamp;
+        m_offsets[GOOSE_SQ_NUM_OFFSET] = offs.sqNum;
+        m_offsets[GOOSE_ST_NUM_OFFSET] = offs.stNum;
+        m_offsets[GOOSE_D1_OFFSET] = offs.value;
 
         /* print_goose_offsets(m_offsets); */
         GoosePublisher_destroy(publisher);

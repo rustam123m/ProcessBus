@@ -63,8 +63,11 @@ static void pkt_redirect(int argc, char* argv[])
         }
 
         uint16_t sent = 0;
-        while (sent < rx) {
+        while (sent < rx && g_doWork == 0) {
             sent += rte_eth_tx_burst(portTx.GetID(), 0, &mbuf[sent], rx - sent);
+        }
+        for (uint16_t i = sent; i < rx; ++i) {
+            rte_pktmbuf_free(mbuf[i]);
         }
     }
 }

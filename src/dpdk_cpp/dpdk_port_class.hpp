@@ -28,9 +28,11 @@ namespace DPDK
                 Stop();
 
                 for (rte_flow *flow : m_flows) {
-                    rte_flow_error error;
+                    rte_flow_error error = {};
                     if (rte_flow_destroy(m_portID, flow, &error) < 0) {
-                        std::cerr << std::string(error.message) << std::endl;
+                        if (error.message) {
+                            std::cerr << error.message << std::endl;
+                        }
                     }
                 }
 

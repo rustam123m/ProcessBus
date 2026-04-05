@@ -24,7 +24,7 @@ add_subdirectory(3rdparty/)
 
 # Options: Intel Atom
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse4")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse4 -Wno-unused-result -Wno-volatile")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse4 -fno-strict-aliasing -Wno-unused-result -Wno-volatile")
 
 # DPDK's related functions
 function(setup_dpdk TARGET_NAME)

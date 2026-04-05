@@ -3,6 +3,7 @@
 #include <rte_mempool.h>
 #include <rte_mbuf.h>
 
+#include <cassert>
 #include <cstdint>
 #include <cstring>
 #include <vector>
@@ -29,12 +30,9 @@ namespace DPDK
 
     private:
         void ProcessMbuf(struct rte_mbuf *mbuf, unsigned idx) {
+            assert(m_skeleton.size() <= rte_pktmbuf_tailroom(mbuf));
             uint8_t *data = rte_pktmbuf_mtod(mbuf, uint8_t *);
             std::memcpy(data, m_skeleton.data(), m_skeleton.size());
-            mbuf->data_len = m_skeleton.size();
-            mbuf->pkt_len = mbuf->data_len;
-
-            rte_pktmbuf_free(mbuf);
         }
 
     private:

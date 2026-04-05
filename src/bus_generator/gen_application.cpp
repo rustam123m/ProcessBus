@@ -94,6 +94,7 @@ static void tx_packets_cycle(TxCycleConfig &conf, GenAppStat &stat, GenClass &ge
                     }
                 } else {
                     rte_eth_tx_done_cleanup(conf.nicPortID, conf.nicQueueID, 0);
+                    if (!doWork) break;
                     continue;
                 }
 
