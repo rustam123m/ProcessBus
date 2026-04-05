@@ -13,6 +13,10 @@ add_executable(${UNIT_TEST}
     goose_traffic_test.cpp
     appid_container_test.cpp
     pipeline_test.cpp
+    mac_addr_test.cpp
+    goose_container_test.cpp
+    sv_container_test.cpp
+    parser_error_test.cpp
     main.cpp
 )
 target_link_libraries(${UNIT_TEST} PRIVATE gtest gmock gtest_main)
