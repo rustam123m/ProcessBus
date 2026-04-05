@@ -1,0 +1,25 @@
+From 26bb79928cee382ec030296b794c27e71fe61e05 Mon Sep 17 00:00:00 2001
+From: Rustam Mustafin <mustafin@prosoftsystems.ru>
+Date: Tue, 15 Jul 2025 12:50:38 +0700
+Subject: [PATCH 2/2] Fix addding VLAN for GOOSE with VID=0
+
+---
+ src/goose/goose_publisher.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/goose/goose_publisher.c b/src/goose/goose_publisher.c
+index 5f8db110..2e1dad72 100644
+--- a/src/goose/goose_publisher.c
++++ b/src/goose/goose_publisher.c
+@@ -570,7 +570,7 @@ GoosePublisher_generateMessage(GoosePublisher self, CommParameters* parameters,
+     bufPos += 6;
+ 
+     /* VLAN tag if requested */
+-    if (parameters && parameters->vlanId != 0) {
++    if (parameters) {
+         buffer[bufPos++] = 0x81;     /* TPID */
+         buffer[bufPos++] = 0x00;
+         
+-- 
+2.43.0
+

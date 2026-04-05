@@ -1,0 +1,472 @@
+From de53487bfd00e461588bbe18256b63e21d7330af Mon Sep 17 00:00:00 2001
+From: Rustam Mustafin <mustafin@prosoftsystems.ru>
+Date: Mon, 12 May 2025 11:15:08 +0700
+Subject: [PATCH 1/2] * Added functions to generate GOOSE and R-GOOSE messages
+ to a buffer. * Added functions to retrieve offsets for main settings in GOOSE
+ and SV messages.
+
+---
+ src/goose/goose_publisher.c       | 117 +++++++++++++++++++++++++++++-
+ src/goose/goose_publisher.h       |  18 ++++-
+ src/goose/goose_receiver.c        | 114 +++++++++++++++++++++++++++++
+ src/goose/goose_receiver.h        |  14 ++++
+ src/sampled_values/sv_publisher.c |  36 +++++++++
+ src/sampled_values/sv_publisher.h |  17 +++++
+ 6 files changed, 309 insertions(+), 7 deletions(-)
+
+diff --git a/src/goose/goose_publisher.c b/src/goose/goose_publisher.c
+index fa276ec1..5f8db110 100644
+--- a/src/goose/goose_publisher.c
++++ b/src/goose/goose_publisher.c
+@@ -163,7 +163,7 @@ GoosePublisher_destroy(GoosePublisher self)
+ }
+ 
+ void
+-GoosePublisher_setGoID(GoosePublisher self, char* goID)
++GoosePublisher_setGoID(GoosePublisher self, const char* goID)
+ {
+     if (self->goID)
+         GLOBAL_FREEMEM(self->goID);
+@@ -172,7 +172,7 @@ GoosePublisher_setGoID(GoosePublisher self, char* goID)
+ }
+ 
+ void
+-GoosePublisher_setGoCbRef(GoosePublisher self, char* goCbRef)
++GoosePublisher_setGoCbRef(GoosePublisher self, const char* goCbRef)
+ {
+     if (self->goCBRef)
+         GLOBAL_FREEMEM(self->goCBRef);
+@@ -181,7 +181,7 @@ GoosePublisher_setGoCbRef(GoosePublisher self, char* goCbRef)
+ }
+ 
+ void
+-GoosePublisher_setDataSetRef(GoosePublisher self, char* dataSetRef)
++GoosePublisher_setDataSetRef(GoosePublisher self, const char* dataSetRef)
+ {
+     if (self->dataSetRef)
+         GLOBAL_FREEMEM(self->dataSetRef);
+@@ -238,7 +238,8 @@ GoosePublisher_increaseStNum(GoosePublisher self)
+ }
+ 
+ void
+-GoosePublisher_reset(GoosePublisher self) {
++GoosePublisher_reset(GoosePublisher self)
++{
+     self->sqNum = 0;
+     self->stNum = 1;
+ }
+@@ -548,3 +549,111 @@ GoosePublisher_publishAndDump(GoosePublisher self, LinkedList dataSet, char *msg
+ 
+     return rc;
+ }
++
++int
++GoosePublisher_generateMessage(GoosePublisher self, CommParameters* parameters, LinkedList dataSet,
++                               uint8_t* buffer, size_t bufferSize, size_t* messageLength)
++{
++    if (buffer == NULL || messageLength == NULL || bufferSize < 22) /* Minimum Ethernet header size */
++        return -1;
++
++    uint8_t defaultDstAddr[] = CONFIG_GOOSE_DEFAULT_DST_ADDRESS;
++    uint8_t* dstAddr = parameters ? parameters->dstAddress : defaultDstAddr;
++    uint8_t priority = parameters ? parameters->vlanPriority : CONFIG_GOOSE_DEFAULT_PRIORITY;
++    uint16_t vlanId = parameters ? parameters->vlanId : CONFIG_GOOSE_DEFAULT_VLAN_ID;
++    uint16_t appId = parameters ? parameters->appId : CONFIG_GOOSE_DEFAULT_APPID;
++
++    /* Ethernet header */
++    int bufPos = 0;
++    memcpy(buffer, dstAddr, 6);
++    bufPos += 6;
++    bufPos += 6;
++
++    /* VLAN tag if requested */
++    if (parameters && parameters->vlanId != 0) {
++        buffer[bufPos++] = 0x81;     /* TPID */
++        buffer[bufPos++] = 0x00;
++        
++        uint8_t tci1 = priority << 5;
++        tci1 += vlanId / 256;
++        buffer[bufPos++] = tci1;
++        buffer[bufPos++] = vlanId % 256;
++    }
++
++    /* EtherType GOOSE */
++    buffer[bufPos++] = 0x88;
++    buffer[bufPos++] = 0xB8;
++
++    /* APPID */
++    buffer[bufPos++] = appId / 256;
++    buffer[bufPos++] = appId % 256;
++
++    int lengthFieldPos = bufPos;
++    bufPos += 2; /* Reserve space for length */
++
++    /* Reserved fields */
++    buffer[bufPos++] = 0x00;
++    buffer[bufPos++] = 0x00;
++    buffer[bufPos++] = 0x00;
++    buffer[bufPos++] = 0x00;
++
++    /* Generate payload */
++    int payloadLength = createGoosePayload(self, dataSet, buffer + bufPos, bufferSize - bufPos);
++    if (payloadLength < 0)
++        return -1;
++
++    /* Update length field */
++    size_t totalLength = payloadLength + 8; /* Including reserved fields */
++    buffer[lengthFieldPos] = totalLength / 256;
++    buffer[lengthFieldPos + 1] = totalLength % 256;
++
++    *messageLength = bufPos + payloadLength;
++    self->sqNum++;
++    if (self->sqNum == 0)
++        self->sqNum = 1;
++
++    return 0;
++}
++
++// R-GOOSE
++extern int
++encodePacket(RSession self, uint8_t payloadType, uint8_t* buffer, int bufPos, RSessionPayloadElement elements);
++
++int
++GoosePublisher_generateRGooseMessage(GoosePublisher self, RSession session, LinkedList dataSet,
++                                     uint8_t* buffer, size_t bufferSize, size_t* messageLength)
++{
++    if (buffer == NULL || messageLength == NULL || bufferSize < 128) /* Minimum size for R-GOOSE */
++        return -1;
++
++    /* Generate the GOOSE payload first */
++    uint8_t payloadBuffer[GOOSE_MAX_MESSAGE_SIZE];
++    int payloadLength = createGoosePayload(self, dataSet, payloadBuffer, GOOSE_MAX_MESSAGE_SIZE);
++    if (payloadLength < 0)
++        return -1;
++
++    /* Prepare RSession payload element */
++    struct sRSessionPayloadElement element = {
++        .simulation = self->simulation,
++        .appId = self->appId,
++        .payload = payloadBuffer,
++        .payloadType = 0x81, /* GOOSE APDU */
++        .payloadSize = payloadLength,
++        .nextElement = NULL
++    };
++
++    /* Use RSession encoding logic */
++    int msgSize = encodePacket(session, RSESSION_SPDU_ID_GOOSE, buffer, 0, &element);
++    if (msgSize <= 0) {
++        if (DEBUG_GOOSE_PUBLISHER)
++            printf("GOOSE_PUBLISHER: Failed to encode R-GOOSE message\n");
++        return -1;
++    }
++
++    *messageLength = msgSize;
++    self->sqNum++;
++    if (self->sqNum == 0)
++        self->sqNum = 1;
++
++    return 0;
++}
+diff --git a/src/goose/goose_publisher.h b/src/goose/goose_publisher.h
+index 1c406cd6..52948636 100644
+--- a/src/goose/goose_publisher.h
++++ b/src/goose/goose_publisher.h
+@@ -121,7 +121,7 @@ GoosePublisher_publishAndDump(GoosePublisher self, LinkedList dataSet, char* msg
+  * \param goID the GoId string
+  */
+ LIB61850_API void
+-GoosePublisher_setGoID(GoosePublisher self, char* goID);
++GoosePublisher_setGoID(GoosePublisher self, const char* goID);
+ 
+ /**
+  * \brief Sets the GoCB reference used by the GoosePublisher instance
+@@ -130,7 +130,7 @@ GoosePublisher_setGoID(GoosePublisher self, char* goID);
+  * \param goCbRef the GoCB reference string
+  */
+ LIB61850_API void
+-GoosePublisher_setGoCbRef(GoosePublisher self, char* goCbRef);
++GoosePublisher_setGoCbRef(GoosePublisher self, const char* goCbRef);
+ 
+ /**
+  * \brief Sets the time allowed to live value of the GOOSE messages
+@@ -148,7 +148,7 @@ GoosePublisher_setTimeAllowedToLive(GoosePublisher self, uint32_t timeAllowedToL
+  * \param dataSetRef the data set reference string
+  */
+ LIB61850_API void
+-GoosePublisher_setDataSetRef(GoosePublisher self, char* dataSetRef);
++GoosePublisher_setDataSetRef(GoosePublisher self, const char* dataSetRef);
+ 
+ /**
+  * \brief Sets the configuration revision used by the GoosePublisher instance
+@@ -222,6 +222,18 @@ GoosePublisher_increaseStNum(GoosePublisher self);
+ LIB61850_API void
+ GoosePublisher_reset(GoosePublisher self);
+ 
++
++LIB61850_API int
++GoosePublisher_generateMessage(GoosePublisher self, CommParameters* parameters,
++                               LinkedList dataSet, uint8_t* buffer, size_t bufferSize,
++                               size_t* messageLength);
++
++LIB61850_API int
++GoosePublisher_generateRGooseMessage(GoosePublisher self, RSession session,
++                                     LinkedList dataSet, uint8_t* buffer, size_t bufferSize,
++                                     size_t* messageLength);
++
++
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/src/goose/goose_receiver.c b/src/goose/goose_receiver.c
+index fd94d9c5..b7ed58f1 100644
+--- a/src/goose/goose_receiver.c
++++ b/src/goose/goose_receiver.c
+@@ -1426,3 +1426,117 @@ GooseReceiver_handleMessage(GooseReceiver self, uint8_t* buffer, int size)
+ {
+     parseGooseMessage(self, buffer, size);
+ }
++
++bool
++GooseReceiver_getMessageOffsets(uint8_t* buffer, int size, GooseMessageOffsets* offsets)
++{
++    int bufPos;
++    bool result = false;
++
++    if (size < 22)
++        return false;
++
++    offsets->appid = -1;
++    offsets->goid = -1;
++    offsets->gocb = -1;
++    offsets->dataset = -1;
++    offsets->value = -1;
++
++    /* Skip Ethernet addresses */
++    bufPos = 12;
++    int headerLength = 14;
++
++    /* Check for VLAN tag */
++    if ((buffer[bufPos] == 0x81) && (buffer[bufPos + 1] == 0x00)) {
++        bufPos += 4;
++        headerLength += 4;
++        if (size < (22 + 4))
++            return false;
++    }
++
++    /* Check for GOOSE Ethertype */
++    if (buffer[bufPos++] != 0x88 || buffer[bufPos++] != 0xb8)
++        return false;
++
++    /* APPID offset */
++    offsets->appid = bufPos;
++    bufPos += 2; /* Skip APPID */
++
++    /* Length field */
++    uint16_t length = buffer[bufPos] * 0x100 + buffer[bufPos + 1];
++    bufPos += 2;
++
++    /* Skip reserved fields */
++    bufPos += 4;
++
++    int apduLength = length - 8;
++    if (apduLength < 0 || size < length + headerLength)
++        return false;
++
++    /* Parse GOOSE PDU */
++    if (buffer[bufPos++] == 0x61) {
++        int gooseLength;
++        bufPos = BerDecoder_decodeLength(buffer, &gooseLength, bufPos, size);
++        if (bufPos < 0)
++            return false;
++
++        int gooseEnd = bufPos + gooseLength;
++
++        while (bufPos < gooseEnd) {
++            int elementLength;
++            uint8_t tag = buffer[bufPos++];
++            bufPos = BerDecoder_decodeLength(buffer, &elementLength, bufPos, size);
++            if (bufPos < 0)
++                return false;
++
++            switch (tag) {
++            case 0x80: /* gocbRef */
++                offsets->gocb = bufPos;
++                break;
++            case 0x82: /* DatSet */
++                offsets->dataset = bufPos;
++                break;
++            case 0x83: /* GoID */
++                offsets->goid = bufPos;
++                break;
++            case 0x84: /* t */
++                offsets->timestamp = bufPos;
++                break;
++            case 0x85: /* StNum */
++                offsets->stNum = bufPos;
++                break;
++            case 0x86: /* SqNum */
++                offsets->sqNum = bufPos;
++                break;
++            case 0xab: /* allData */
++                if (elementLength > 0) {
++                    int dataBufPos = bufPos;
++                    int dataEnd = dataBufPos + elementLength;
++                    while (dataBufPos < dataEnd) {
++                        uint8_t dataTag = buffer[dataBufPos++];
++                        dataBufPos = BerDecoder_decodeLength(buffer, &elementLength, dataBufPos, dataEnd);
++                        if (dataBufPos >= 0) {
++                            offsets->value = dataBufPos;
++                            result = true; /* Found all required fields */
++                            goto exit_parse;
++                        }
++                    }
++                }
++                break;
++            default:
++                break; /* Skip other tags */
++            }
++            bufPos += elementLength;
++        }
++    }
++
++exit_parse:
++    if (offsets->appid >= 0
++        && offsets->gocb >= 0
++        && offsets->dataset >= 0
++        && offsets->goid >= 0
++        && offsets->value >= 0) {
++        result = true;
++    }
++    return result;
++}
+diff --git a/src/goose/goose_receiver.h b/src/goose/goose_receiver.h
+index 4637c6a8..b328a122 100644
+--- a/src/goose/goose_receiver.h
++++ b/src/goose/goose_receiver.h
+@@ -190,6 +190,20 @@ GooseReceiver_tick(GooseReceiver self);
+ LIB61850_API void
+ GooseReceiver_handleMessage(GooseReceiver self, uint8_t* buffer, int size);
+ 
++typedef struct {
++    int appid;      /* Offset of APPID in the Ethernet header */
++    int goid;       /* Offset of GoID in the GOOSE PDU */
++    int timestamp;  /* Offset of T in the GOOSE PDU */
++    int gocb;       /* Offset of GoCBRef in the GOOSE PDU */
++    int stNum;      /* Offset of StNum in the GOOSE PDU */
++    int sqNum;      /* Offset of SqNum in the GOOSE PDU */
++    int dataset;    /* Offset of Dataset reference in the GOOSE PDU */
++    int value;      /* Offset of the first data value in the dataset */
++} GooseMessageOffsets;
++
++LIB61850_API bool
++GooseReceiver_getMessageOffsets(uint8_t* buffer, int size, GooseMessageOffsets* offsets);
++
+ /**@}*/
+ 
+ #ifdef __cplusplus
+diff --git a/src/sampled_values/sv_publisher.c b/src/sampled_values/sv_publisher.c
+index 90179cf6..921a0bde 100644
+--- a/src/sampled_values/sv_publisher.c
++++ b/src/sampled_values/sv_publisher.c
+@@ -64,6 +64,7 @@ struct sSVPublisher_ASDU {
+     uint8_t smpMod;
+     uint16_t smpRate;
+ 
++    uint8_t* svIDBuf;
+     uint8_t* smpCntBuf;
+     uint8_t* smpSynchBuf;
+ 
+@@ -76,6 +77,8 @@ struct sSVPublisher {
+     uint16_t appId;
+     bool simulation;
+ 
++    uint8_t* appIdBuf;
++
+ #if (CONFIG_IEC61850_L2_SMV == 1)
+     /* only for Ethernet based SV */
+     EthernetSocket ethernetSocket;
+@@ -170,6 +173,7 @@ preparePacketBuffer(SVPublisher self, CommParameters* parameters, const char* in
+         self->buffer[bufPos++] = 0xBa;
+ 
+         /* APPID */
++        self->appIdBuf = self->buffer + bufPos;
+         self->buffer[bufPos++] = appId / 256;
+         self->buffer[bufPos++] = appId % 256;
+ 
+@@ -414,6 +418,7 @@ SVPublisher_ASDU_encodeToBuffer(SVPublisher_ASDU self, uint8_t* buffer, int bufP
+     bufPos = BerEncoder_encodeTL(0x30, encodedSize, buffer, bufPos);
+ 
+     /* svID */
++    self->svIDBuf = buffer + bufPos + 2 /* ASN tag is 2 bytes */;
+     bufPos = BerEncoder_encodeStringWithTag(0x80, self->svID, buffer, bufPos);
+ 
+     /* DatSet */
+@@ -528,6 +533,37 @@ SVPublisher_setupComplete(SVPublisher self)
+     self->payloadLength = payloadLength;
+ }
+ 
++void
++SVPublisher_getBuffer(SVPublisher self, uint8_t **buffer, int *size)
++{
++    *buffer = self->buffer;
++    *size = self->payloadStart + self->payloadLength;
++}
++
++int
++SVPublisher_getAPPID_Offset(SVPublisher self)
++{
++    return self->appIdBuf - self->buffer;
++}
++
++int
++SVPublisher_ASDU_getSVID_Offset(SVPublisher pub, SVPublisher_ASDU asdu)
++{
++    return asdu->svIDBuf - pub->buffer;
++}
++
++int
++SVPublisher_ASDU_getSmpCntOffset(SVPublisher pub, SVPublisher_ASDU asdu)
++{
++    return asdu->smpCntBuf - pub->buffer;
++}
++
++int
++SVPublisher_ASDU_getDataOffset(SVPublisher pub, SVPublisher_ASDU asdu)
++{
++    return asdu->_dataBuffer - pub->buffer;
++}
++
+ void
+ SVPublisher_publish(SVPublisher self)
+ {
+diff --git a/src/sampled_values/sv_publisher.h b/src/sampled_values/sv_publisher.h
+index ebb1e7fe..f52409e1 100644
+--- a/src/sampled_values/sv_publisher.h
++++ b/src/sampled_values/sv_publisher.h
+@@ -123,6 +123,23 @@ SVPublisher_addASDU(SVPublisher self, const char* svID, const char* datset, uint
+ LIB61850_API void
+ SVPublisher_setupComplete(SVPublisher self);
+ 
++
++LIB61850_API void
++SVPublisher_getBuffer(SVPublisher self, uint8_t **buffer, int *size);
++
++LIB61850_API int
++SVPublisher_getAPPID_Offset(SVPublisher self);
++
++LIB61850_API int
++SVPublisher_ASDU_getSVID_Offset(SVPublisher pub, SVPublisher_ASDU asdu);
++
++LIB61850_API int
++SVPublisher_ASDU_getSmpCntOffset(SVPublisher pub, SVPublisher_ASDU asdu);
++
++LIB61850_API int
++SVPublisher_ASDU_getDataOffset(SVPublisher pub, SVPublisher_ASDU asdu);
++
++
+ /**
+  * \brief Publish all registered ASDUs
+  *
+-- 
+2.43.0
+

@@ -29,7 +29,7 @@ RUN useradd -m -s /bin/bash builder \
     && echo "builder ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/builder
 
 # Set working directory
-WORKDIR /home/builder
+WORKDIR /ProcessBus
 USER builder
 
 CMD ["/bin/bash"]

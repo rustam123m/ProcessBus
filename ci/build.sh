@@ -19,7 +19,7 @@ OPT_REBUILD=0
 
 function usage()
 {
-    echo "Usage: $0 [--update=0/1] [--dpdk=0/1] [--pbus=0/1] [--rebuild] [--check] [--setup] [--shell]"
+    echo "Usage: $0 [--update=0/1] [--dpdk=0/1] [--pbus=0/1] [--rebuild] [--clean] [--check] [--setup] [--shell]"
     exit 1
 }
 
@@ -152,6 +152,15 @@ while [[ "$#" -gt 0 ]]; do
             OPT_BUILD_DPDK=0
             OPT_BUILD_PBUS=0
             OPT_REBUILD=1
+            ;;
+        --clean)
+            echo "Cleaning build artifacts..."
+            rm -rf "$BUILD_DIR" "$INSTALL_DIR" "$DPDK_DIR/build/"
+            echo "Re-initializing submodules..."
+            git submodule deinit -f --all
+            git submodule update --init --recursive
+            echo "Clean done"
+            exit 0
             ;;
         --check)
             check_code
