@@ -5,21 +5,47 @@ set -e # Exit on error
 
 SCRIPT_PATH="$(dirname "$(realpath "$0")")"
 REPO_DIR="$SCRIPT_PATH/../"
-BUILD_DIR="$REPO_DIR/build/"
-INSTALL_DIR="$REPO_DIR/install/"
 DPDK_DIR="$REPO_DIR/3rdparty/dpdk/"
 DPDK_INSTALL="$DPDK_DIR/build/install/"
 DPDK_PKGCONFIG="$DPDK_INSTALL/lib/pkgconfig/"
-TARGET_PROCESSOR=atom
 
+PLATFORM=atom
 OPT_UPDATE_SRC=1
 OPT_BUILD_DPDK=1
 OPT_BUILD_PBUS=1
 OPT_REBUILD=0
 
+# Per-platform settings
+configure_platform() {
+    case "$PLATFORM" in
+        atom)
+            TARGET_PROCESSOR=atom
+            DPDK_DRIVERS="net_e1000,net_igc,net_ixgbe,net_i40e,net_af_xdp,net_af_packet,net_tap,net_virtio,net_ring,net_vhost"
+            BUILD_DIR="$REPO_DIR/build/"
+            INSTALL_DIR="$REPO_DIR/install/"
+            ;;
+        qemu)
+            TARGET_PROCESSOR=generic
+            DPDK_DRIVERS="net_virtio,net_tap,net_ring"
+            BUILD_DIR="$REPO_DIR/build-qemu/"
+            INSTALL_DIR="$REPO_DIR/install-qemu/"
+            ;;
+        arm64)
+            TARGET_PROCESSOR=generic
+            DPDK_DRIVERS="net_af_xdp,net_af_packet,net_tap,net_ring"
+            BUILD_DIR="$REPO_DIR/build-arm64/"
+            INSTALL_DIR="$REPO_DIR/install-arm64/"
+            ;;
+        *)
+            echo "Unknown platform: $PLATFORM"
+            exit 1
+            ;;
+    esac
+}
+
 function usage()
 {
-    echo "Usage: $0 [--update=0/1] [--dpdk=0/1] [--pbus=0/1] [--rebuild] [--clean] [--check] [--setup] [--shell]"
+    echo "Usage: $0 [--platform=atom/qemu/arm64/all] [--update=0/1] [--dpdk=0/1] [--pbus=0/1] [--rebuild] [--clean] [--check] [--setup] [--shell]"
     exit 1
 }
 
@@ -55,7 +81,7 @@ function build_dpdk()
     cd $DPDK_DIR
     rm -rf build/
 
-    # Building: x86 Intel Atom + Intel NICs
+    # Building DPDK with platform-specific settings
     meson setup build \
         --prefix="$DPDK_DIR/build/install/" \
         -Dlibdir=lib \
@@ -64,7 +90,7 @@ function build_dpdk()
         -Dbuildtype=release \
         -Dmax_numa_nodes=1 \
         -Ddisable_drivers=all \
-        -Denable_drivers=net_e1000,net_igc,net_ixgbe,net_ice,net_af_xdp,net_tap,net_virtio,net_ring,net_bpf,net_vhost
+        -Denable_drivers=$DPDK_DRIVERS
 
     # Install
     ninja -C build
@@ -100,13 +126,14 @@ function build_apps()
     export PKG_CONFIG_PATH="$DPDK_PKGCONFIG:$PKG_CONFIG_PATH"
 
     cmake -S ./ -B "$BUILD_DIR" \
+        -DPLATFORM=$PLATFORM \
         -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_TESTS=ON \
         -DBUILD_SAMPLES=OFF \
         -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-        -DCMAKE_CXX_FLAGS_RELEASE="-O3 -march=$TARGET_PROCESSOR -msse3" \
-        -DCMAKE_C_FLAGS_RELEASE="-O3 -march=$TARGET_PROCESSOR -msse3"
+        -DCMAKE_CXX_FLAGS_RELEASE="-O3" \
+        -DCMAKE_C_FLAGS_RELEASE="-O3"
 
     rebuild_and_install
 }
@@ -138,6 +165,13 @@ function check_code()
 # Options
 while [[ "$#" -gt 0 ]]; do
     case $1 in
+        --platform=*)
+            PLATFORM="${1#*=}"
+            ;;
+        --platform)
+            PLATFORM="$2"
+            shift
+            ;;
         --update=*)
             OPT_UPDATE_SRC="${1#*=}"
             ;;
@@ -181,23 +215,43 @@ while [[ "$#" -gt 0 ]]; do
     shift
 done
 
+ALL_PLATFORMS="atom qemu"
+
+# Source update runs once regardless of platform
 if [[ "$OPT_UPDATE_SRC" -eq 1 ]]; then
     echo "Performing source update..."
     prepare_sources
 fi
 
-if [[ "$OPT_BUILD_DPDK" -eq 1 ]]; then
-    echo "Building DPDK..."
-    build_dpdk
-fi
+build_for_platform() {
+    configure_platform
+    echo "=== Platform: $PLATFORM ==="
 
-if [[ "$OPT_BUILD_PBUS" -eq 1 ]]; then
-    echo "Building PBUS..."
-    build_apps
-fi
+    if [[ "$OPT_BUILD_DPDK" -eq 1 ]]; then
+        echo "Building DPDK..."
+        build_dpdk
+    fi
 
-if [[ "$OPT_REBUILD" -eq 1 ]]; then
-    echo "Rebuild apps without cleaning..."
-    rebuild_and_install
+    if [[ "$OPT_BUILD_PBUS" -eq 1 ]]; then
+        echo "Building PBUS..."
+        build_apps
+    fi
+
+    if [[ "$OPT_REBUILD" -eq 1 ]]; then
+        echo "Rebuild apps without cleaning..."
+        rebuild_and_install
+    fi
+}
+
+if [[ "$PLATFORM" == "all" ]]; then
+    if [[ "$OPT_BUILD_DPDK" -eq 1 ]]; then
+        echo "Error: --platform=all cannot build DPDK (shared build dir). Build DPDK per-platform."
+        exit 1
+    fi
+    for PLATFORM in $ALL_PLATFORMS; do
+        build_for_platform
+    done
+else
+    build_for_platform
 fi
 

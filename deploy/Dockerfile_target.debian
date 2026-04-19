@@ -1,7 +1,7 @@
 FROM debian:12
 
 # Define a username variable
-ARG USERNAME=admin
+ARG USERNAME=jarvis
 
 # Enable testing sources
 RUN echo "deb http://deb.debian.org/debian testing main" >> /etc/apt/sources.list

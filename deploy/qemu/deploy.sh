@@ -7,17 +7,16 @@ set -e
 
 SCRIPT_PATH="$(dirname "$(realpath "$0")")"
 REPO_DIR="$SCRIPT_PATH/../../"
-BUILD_DIR="$REPO_DIR/build/"
-INSTALL_DIR="$REPO_DIR/install/"
+INSTALL_DIR="$REPO_DIR/install-qemu/"
 PBUS_FILES="$SCRIPT_PATH/pbus/"
 
-USER=user
+USER=jarvis
 HOST=192.168.21.2
-REMOTE_DIR=/home/user/
+REMOTE_DIR=/home/jarvis/
 
 # Rebuild (skip with --no-build)
 if [ "${1}" != "--no-build" ]; then
-    $REPO_DIR/ci/build.sh --rebuild
+    $REPO_DIR/ci/build.sh --platform=qemu --rebuild
 fi
 
 # Create a folder with all files
@@ -25,7 +24,7 @@ rm -rf $PBUS_FILES
 mkdir $PBUS_FILES
 # Collect
 DIRECTORIES=(
-    "$REPO_DIR/install/*"
+    "$INSTALL_DIR/*"
     "$REPO_DIR/deploy/common/tune_linux.sh"
     "$REPO_DIR/deploy/common/hw_test_runner.sh"
     "$REPO_DIR/deploy/qemu/scripts/*"

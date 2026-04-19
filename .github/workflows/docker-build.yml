@@ -7,6 +7,16 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: atom
+            build_dir: build
+            install_dir: install
+          - platform: qemu
+            build_dir: build-qemu
+            install_dir: install-qemu
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,7 +31,7 @@ jobs:
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             --user $(id -u):$(id -g) \
-            pbus-build bash ci/build.sh
+            pbus-build bash ci/build.sh --platform=${{ matrix.platform }}
 
       - name: Run unit tests
         run: |
@@ -29,7 +39,7 @@ jobs:
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             --user $(id -u):$(id -g) \
-            pbus-build ./build/src/tests/unit_tests
+            pbus-build ./${{ matrix.build_dir }}/src/tests/unit_tests
 
       - name: Prepare artifact name
         id: prep
@@ -39,10 +49,10 @@ jobs:
         run: |
           BRANCH="${GITHUB_REF_NAME//\//-}"
           DATE=$(date +%Y%m%d)
-          echo "file=pbus-${BRANCH}-${DATE}-${GITHUB_RUN_NUMBER}.tar.gz" >> "$GITHUB_OUTPUT"
+          echo "file=pbus-${{ matrix.platform }}-${BRANCH}-${DATE}-${GITHUB_RUN_NUMBER}.tar.gz" >> "$GITHUB_OUTPUT"
 
       - name: Package install directory
-        run: tar -czf "${{ steps.prep.outputs.file }}" -C install .
+        run: tar -czf "${{ steps.prep.outputs.file }}" -C ${{ matrix.install_dir }} .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

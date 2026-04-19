@@ -17,7 +17,7 @@ done
 modprobe uio
 modprobe uio_pci_generic
 
-cd /home/user/pbus/
+cd /home/jarvis/pbus/
 ./dpdk-devbind.py --bind=uio_pci_generic 0000:00:04.0 0000:00:05.0
 ./dpdk-devbind.py --status
 

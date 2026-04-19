@@ -39,6 +39,24 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Clean up stale DPDK state from previous runs
+killall -9 bus_generator bus_processor 2>/dev/null || true
+sleep 2
+rm -rf /var/run/dpdk/
+rm -f "$GEN_LOG" "$PROC_LOG"
+
+# Clean hugepages: unmount all layers, remount once
+for mp in /mnt/bus_gen /mnt/bus_proc /mnt/delay_meter /mnt/redirect1 /mnt/redirect2; do
+    while mountpoint -q "$mp" 2>/dev/null; do
+        if ! umount "$mp" 2>/dev/null; then
+            echo "ERROR: Cannot unmount $mp (device busy). Kill all DPDK processes first."
+            exit 1
+        fi
+    done
+    mkdir -p "$mp"
+    mount -t hugetlbfs nodev "$mp"
+done
+
 echo "=== HW Test Runner ==="
 echo "Generator:  $GEN_SCRIPT $GEN_ARGS"
 echo "Processor:  $PROC_SCRIPT $PROC_ARGS"
@@ -52,13 +70,19 @@ echo "Generator started (PID=$GEN_PID)"
 
 # Start processor (override lcores if specified)
 if [ -n "$PROC_LCORES" ]; then
-    # Replace the -l argument in the script by passing DPDK EAL args
-    # The run_processor.sh passes $@ after --, so we prepend lcore override
-    # Actually, we need to call bus_processor directly with custom lcores
-    PROC_SCRIPT_DIR="$(dirname "$PROC_SCRIPT")"
-    source_nic=$(grep "NIC_PCI_ADDR" "$PROC_SCRIPT" | head -1 | grep -v "^#" | cut -d'"' -f2)
-    hugedir=$(grep "huge-dir" "$PROC_SCRIPT" | head -1 | grep -oP '/mnt/[^ /]+/')
-    prefix=$(grep "file-prefix" "$PROC_SCRIPT" | head -1 | grep -oP 'file-prefix=\K[^ ]+')
+    if [ ! -f "$PROC_SCRIPT" ]; then
+        echo "ERROR: Processor script not found: $PROC_SCRIPT"
+        exit 1
+    fi
+
+    source_nic=$(grep "NIC_PCI_ADDR" "$PROC_SCRIPT" | head -1 | grep -v "^#" | cut -d'"' -f2 || true)
+    hugedir=$(grep -oP '/mnt/[^ /]+/' "$PROC_SCRIPT" | head -1 || true)
+    prefix=$(grep -oP 'file-prefix=\K[^ ]+' "$PROC_SCRIPT" | head -1 || true)
+
+    if [ -z "$source_nic" ] || [ -z "$hugedir" ] || [ -z "$prefix" ]; then
+        echo "ERROR: Could not parse NIC/hugedir/prefix from $PROC_SCRIPT"
+        exit 1
+    fi
 
     bin/bus_processor -l "$PROC_LCORES" \
         -a "$source_nic" \

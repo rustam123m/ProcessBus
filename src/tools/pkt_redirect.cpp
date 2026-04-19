@@ -1,12 +1,13 @@
 #include "dpdk_cpp/dpdk_port_class.hpp"
 #include "dpdk_cpp/dpdk_mempool_class.hpp"
 #include "common/utils.hpp"
+#include "common/platform_config.hpp"
 
 #include <csignal>
 
-static constexpr uint16_t RX_DESC       = 4 * 1024;
-static constexpr uint16_t TX_DESC       = 4 * 1024;
-static constexpr unsigned NB_MBUFS      = 32 * 1024;
+static constexpr uint16_t RX_DESC       = Platform::TOOL_DESC_NUM;
+static constexpr uint16_t TX_DESC       = Platform::TOOL_DESC_NUM;
+static constexpr unsigned NB_MBUFS      = Platform::TOOL_MBUF_NUM;
 static constexpr unsigned MBUF_CACHE    = 32;
 static constexpr uint16_t BURST         = 64;
 

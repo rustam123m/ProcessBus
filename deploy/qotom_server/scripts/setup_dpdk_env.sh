@@ -16,7 +16,7 @@ done
 modprobe vfio
 modprobe vfio-pci
 
-cd /home/pulo/pbus/
+cd /home/jarvis/pbus/
 ./dpdk-devbind.py --bind=vfio-pci 0000:0c:00.0 0000:0b:00.0 0000:04:00.0 0000:05:00.0 0000:06:00.0 0000:07:00.0 0000:08:00.0
 ./dpdk-devbind.py --status
 

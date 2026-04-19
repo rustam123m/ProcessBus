@@ -4,6 +4,13 @@ project(pbus LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD          20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Platform selection (default: atom)
+if (NOT DEFINED PLATFORM)
+    set(PLATFORM atom)
+endif()
+include(${CMAKE_SOURCE_DIR}/cmake/platforms/${PLATFORM}.cmake)
+message(STATUS "Building for platform: ${PLATFORM_NAME}")
+
 find_package(PkgConfig REQUIRED)
 
 # Static DPDK via pkg-config
@@ -22,9 +29,9 @@ link_directories(${DPDK_STATIC_LIBRARY_DIRS})
 # libiec61850: GOOSE/R-GOOSE/SV/R-SV
 add_subdirectory(3rdparty/)
 
-# Options: Intel Atom
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse4")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -msse4 -fno-strict-aliasing -Wno-unused-result -Wno-volatile")
+# Platform-specific compiler flags
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${TARGET_ARCH_FLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TARGET_ARCH_FLAGS} -fno-strict-aliasing -Wno-unused-result -Wno-volatile")
 
 # DPDK's related functions
 function(setup_dpdk TARGET_NAME)
@@ -36,26 +43,16 @@ function(setup_dpdk TARGET_NAME)
     target_compile_options(${TARGET_NAME}
         PRIVATE
         ${DPDK_STATIC_CFLAGS}
-        -march=atom          # Target architecture
     )
 
     target_link_libraries(${TARGET_NAME}
         PRIVATE
         -Wl,--whole-archive
         ${DPDK_STATIC_LIBRARIES}
-        -lrte_mempool_ring   # 
-        -lrte_bus_pci        # PCI bus driver
-        -lrte_bus_vdev       # 
-        -lrte_net_virtio     # NIC's PMD
-        -lrte_net_e1000      #
-        -lrte_net_igc        #
-        -lrte_net_ixgbe      # 
-        -lrte_net_i40e       #
-        -lrte_net_af_xdp     #
-        -lrte_net_af_packet  #
-        -lrte_net_ring       #
-        -lrte_net_tap        #
-        -lrte_net_vhost
+        -lrte_mempool_ring
+        -lrte_bus_pci
+        -lrte_bus_vdev
+        ${DPDK_PMD_LIBS}
         -Wl,--no-whole-archive
         pcap
         elf

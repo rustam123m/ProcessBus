@@ -1,5 +1,6 @@
 #include "rx_application.hpp"
 #include "common/console_tables.hpp"
+#include "common/platform_config.hpp"
 
 #include "dpdk_cpp/dpdk_poolsetter_class.hpp"
 #include "dpdk_cpp/dpdk_mempool_class.hpp"
@@ -387,11 +388,11 @@ void RX_Application::DisplayResults()
 
 void RX_Application::Run(StopVarType &doWork)
 {
-    // DPDK settings
-    const unsigned MBUF_NUM = 4 * 512 * 1024,
-                   CACHE_NUM = 64,
-                   RX_DESC_NUM = 64 * 1024 - 1,
-                   TX_DESC_NUM = 128;
+    // DPDK settings (platform-specific)
+    const unsigned MBUF_NUM = Platform::PROCESSOR_MBUF_NUM,
+                   CACHE_NUM = Platform::MEMPOOL_CACHE_SIZE,
+                   RX_DESC_NUM = Platform::PROCESSOR_RX_DESC,
+                   TX_DESC_NUM = Platform::PROCESSOR_TX_DESC;
 
     // Create memory pool
     DPDK::Mempool pool("bus_proc_pool", MBUF_NUM, CACHE_NUM);

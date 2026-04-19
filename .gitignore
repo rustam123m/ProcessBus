@@ -2,7 +2,9 @@
 deploy/orangepi3b/openwrt
 deploy/*/results/
 **/pbus/**
+build-*/
 build/
+install-*/
 install/
 src/playground/
 tmp/

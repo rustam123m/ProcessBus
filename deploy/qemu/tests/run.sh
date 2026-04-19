@@ -14,9 +14,9 @@ PARSE_SCRIPT="$DEVICE_DIR/../common/parse_results.sh"
 RESULTS_DIR="$DEVICE_DIR/results"
 
 HOST=192.168.21.2
-USER=user
+USER=jarvis
 PASS=123
-REMOTE_DIR=/home/user/pbus
+REMOTE_DIR=/home/jarvis/pbus
 
 DO_DEPLOY=0
 RUN_ALL=0

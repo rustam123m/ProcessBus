@@ -11,9 +11,9 @@ BUILD_DIR="$REPO_DIR/build/"
 INSTALL_DIR="$REPO_DIR/install/"
 PBUS_FILES="$SCRIPT_PATH/pbus/"
 
-USER=user
-HOST=192.168.13.3
-REMOTE_DIR=/home/user/
+USER=jarvis
+HOST=blackbox
+REMOTE_DIR=/home/jarvis/
 
 # Rebuild (skip with --no-build)
 if [ "${1}" != "--no-build" ]; then
@@ -25,7 +25,7 @@ rm -rf $PBUS_FILES
 mkdir $PBUS_FILES
 # Collect
 DIRECTORIES=(
-    "$REPO_DIR/install/*"
+    "$INSTALL_DIR/*"
     "$REPO_DIR/deploy/common/tune_linux.sh"
     "$REPO_DIR/deploy/common/hw_test_runner.sh"
     "$REPO_DIR/deploy/qotom_server/scripts/*"

@@ -1,0 +1,38 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "atom",
+      "displayName": "Intel Atom (Qotom production)",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "PLATFORM": "atom",
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install",
+        "BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "qemu",
+      "displayName": "QEMU VM (functional testing)",
+      "binaryDir": "${sourceDir}/build-qemu",
+      "cacheVariables": {
+        "PLATFORM": "qemu",
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install-qemu",
+        "BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "arm64",
+      "displayName": "ARM64 RockChip (placeholder)",
+      "binaryDir": "${sourceDir}/build-arm64",
+      "cacheVariables": {
+        "PLATFORM": "arm64",
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install-arm64",
+        "BUILD_TESTS": "ON"
+      }
+    }
+  ]
+}

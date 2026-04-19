@@ -2,6 +2,7 @@
 
 #include "common/shared_defs.hpp"
 #include "common/console_tables.hpp"
+#include "common/platform_config.hpp"
 
 #include "dpdk_cpp/dpdk_port_class.hpp"
 #include "dpdk_cpp/dpdk_poolsetter_class.hpp"
@@ -169,11 +170,11 @@ void GenApplication::DisplayStatistic()
 
 void GenApplication::Run(StopVarType &doWork)
 {
-    // DPDK settings
-    const unsigned MBUF_NUM = 2 * 512 * 1024,
-                   CACHE_NUM = 64,
-                   RX_DESC_NUM = 128,
-                   TX_DESC_NUM = 64 * 1024 - 1;
+    // DPDK settings (platform-specific)
+    const unsigned MBUF_NUM = Platform::GENERATOR_MBUF_NUM,
+                   CACHE_NUM = Platform::MEMPOOL_CACHE_SIZE,
+                   RX_DESC_NUM = Platform::GENERATOR_RX_DESC,
+                   TX_DESC_NUM = Platform::GENERATOR_TX_DESC;
 
     // Memory pool for skeletons
     DPDK::Mempool pool("bus_gen_pool", MBUF_NUM, CACHE_NUM);
