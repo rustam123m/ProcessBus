@@ -162,22 +162,24 @@ Run this after `make interfaces` and before testing.
 ## Running packet generator or processor
 
 1. `make run` — boots the VM using `deploy/qemu/Makefile`
-2. Inside the VM, preparations are needed:
-    - Detach NIC interfaces from the Linux kernel: `./setup_dpdk_env.sh`
-    - Tune RT kernel parameters: `./tune_linux.sh`
-    - Run the generator: `./run_generator.sh --goose 10,1000`
-    - Run the processor: `./run_processor.sh --goose 10`
+2. From the dev machine, push files and apply hugepages + NIC bind:
+    - `./deploy/qemu/deploy.sh`
+3. Inside the VM (manual run, optional):
+    - `./run_generator.sh --goose 10,1000`
+    - `./run_processor.sh --goose 10`
 
 ## Automated testing
 
 From the dev machine (VM must be running and set up):
 
 ```bash
-# Deploy binaries + run a single scenario
-./deploy/qemu/tests/run.sh --deploy --scenario goose_10x1k
+# Push files + run a single scenario (auto-tunes if needed)
+./deploy/qemu/deploy.sh --scenario goose_10x10
 
 # Run all QEMU scenarios
-./deploy/qemu/tests/run.sh --all
+./deploy/qemu/deploy.sh --all
 ```
 
 Results are saved to `deploy/qemu/results/<date>/<scenario>/`.
+
+See `deploy/qemu/README.md` for the full onboarding flow.

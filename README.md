@@ -29,9 +29,9 @@ This repository contains a proof-of-concept that combines five key ideas:
 
 ## Platforms
 
-- QEMU scripts are provided for testing purposes.
-- Embedded systems based on Intel Atom (e.g. Qotom servers)
-- ARM64 is planned (e.g. RockChip)
+- **QEMU VM** for functional validation — see [deploy/qemu/README.md](deploy/qemu/README.md)
+- **Qotom Intel Atom** servers, bare metal with PREEMPT_RT — see [deploy/qotom/README.md](deploy/qotom/README.md)
+- **ARM64** (e.g. RockChip) — planned
 
 ## How to Build Applications
 
