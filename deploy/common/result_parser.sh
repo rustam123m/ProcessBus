@@ -1,7 +1,7 @@
 #!/bin/bash
 # Parses generator and processor logs into a JSON summary.
 #
-# Usage: parse_results.sh <generator.log> <processor.log> <scenario_name> <duration> <max_latency_us>
+# Usage: result_parser.sh <generator.log> <processor.log> <scenario_name> <duration> <max_latency_us>
 # Output: JSON to stdout
 
 GEN_LOG="$1"

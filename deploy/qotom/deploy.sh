@@ -1,24 +1,24 @@
 #!/bin/bash
-# Deploy ProcessBus to the qemu target (default host: 192.168.21.2)
+# Deploy ProcessBus to the qotom target (default host: blackbox)
 # and optionally run scenarios. Default: push files only, no rebuild.
 #
-# Manual one-time setup of the VM (qemu install, network bridges, SSH key,
-# packages) is described in README.md. Hugepages + NIC bind happen on
-# every boot via setup_platform.sh on the target.
+# Manual one-time setup of the target (SSH key, packages, GRUB cmdline,
+# BIOS) is described in README.md. RT tuning is applied automatically
+# after every reboot via setup_platform.sh on the target.
 
 set -e
 
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 REPO_DIR="$SCRIPT_DIR/../.."
-INSTALL_DIR="$REPO_DIR/install-qemu"
+INSTALL_DIR="$REPO_DIR/install"
 COMMON_DIR="$REPO_DIR/deploy/common"
 RESULTS_DIR="$SCRIPT_DIR/results"
 SCENARIOS_FILE="$SCRIPT_DIR/scenarios.conf"
 PARSE_SCRIPT="$COMMON_DIR/result_parser.sh"
 BUNDLE="$SCRIPT_DIR/pbus"
-SENTINEL="/var/run/pbus_qemu"
+SENTINEL="/var/run/pbus_rt"
 
-HOST="192.168.21.2"
+HOST="blackbox"
 USER="jarvis"
 REMOTE_DIR="/home/jarvis/pbus"
 
@@ -32,7 +32,7 @@ Usage: $0 [--rebuild] [--scenario <name> | --all] [--host <addr>]
 
 Default behaviour: push files only (no rebuild, no scenarios).
 
-  --rebuild          Rebuild via ci/build.sh --platform=qemu --rebuild before pushing
+  --rebuild          Rebuild via ci/build.sh --rebuild before pushing
   --scenario <name>  Run a single scenario from scenarios.conf
   --all              Run all scenarios from scenarios.conf
   --host <addr>      Override target host (default: $HOST)
@@ -61,7 +61,7 @@ SCP="scp -o StrictHostKeyChecking=no"
 # --- 1. Optional rebuild ---
 if [ "$DO_REBUILD" -eq 1 ]; then
     echo "=== Rebuilding ==="
-    "$REPO_DIR/ci/build.sh" --platform=qemu --rebuild
+    "$REPO_DIR/ci/build.sh" --rebuild
 fi
 
 # --- 2. Bundle and push ---
@@ -78,11 +78,11 @@ cp -p  "$SCRIPT_DIR/scenarios.conf"    "$BUNDLE/"
 $SSH "mkdir -p $REMOTE_DIR"
 $SCP -rp "$BUNDLE/"* "$USER@$HOST:$REMOTE_DIR/"
 
-# --- 3. Ensure platform setup applied (idempotent via sentinel) ---
+# --- 3. Ensure RT tuning applied (idempotent via sentinel) ---
 if $SSH "test -e $SENTINEL"; then
-    echo "=== Setup already applied ($SENTINEL present) — skipping ==="
+    echo "=== Tuning already applied ($SENTINEL present) — skipping ==="
 else
-    echo "=== Applying hugepages + DPDK NIC bind ==="
+    echo "=== Applying RT tuning + DPDK env ==="
     $SSH "cd $REMOTE_DIR && sudo bash setup_platform.sh"
 fi
 

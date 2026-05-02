@@ -2,7 +2,7 @@
 # Runs generator + processor for a specified duration, then stops both.
 # Deployed to target device and called via SSH from the test orchestrator.
 #
-# Usage: hw_test_runner.sh --gen-args "<args>" --proc-args "<args>"
+# Usage: target_runner.sh --gen-args "<args>" --proc-args "<args>"
 #                          --proc-lcores "<lcores>" --duration <sec>
 #                          --gen-script <path> --proc-script <path>
 
@@ -110,9 +110,10 @@ if ! kill -0 "$PROC_PID" 2>/dev/null; then
     exit 1
 fi
 
-# Wait for test duration
+# Wait for test duration, streaming the processor's periodic stats live.
+# `timeout` kills tail after DURATION; tail's non-zero exit on signal is expected.
 echo "Running for ${DURATION}s..."
-sleep "$DURATION"
+timeout "$DURATION" tail -F -n +1 "$PROC_LOG" 2>/dev/null || true
 
 # Stop both gracefully
 echo "Stopping..."
