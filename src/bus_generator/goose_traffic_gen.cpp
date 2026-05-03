@@ -64,7 +64,11 @@ void GooseTrafficGen::MakeSkeletonPacket(unsigned sigNum)
     }
 
     GoosePublisher publisher = GoosePublisher_create(&gooseCommParameters, "lo");
-    if (publisher) {
+    if (!publisher) {
+        LinkedList_destroy(dataSetValues);
+        throw std::runtime_error("GoosePublisher_create failed (need CAP_NET_RAW to open AF_PACKET on \"lo\")");
+    }
+    {
         GoosePublisher_setGoID(publisher, const_cast< char* >(GOID_PATTERN));
         GoosePublisher_setGoCbRef(publisher, const_cast< char* >(GOCB_REF_PATTERN));
         GoosePublisher_setDataSetRef(publisher, const_cast< char* >(DS_REF_PATTERN));

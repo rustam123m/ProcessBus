@@ -31,6 +31,7 @@ jobs:
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             --user $(id -u):$(id -g) \
+            --cap-add=NET_RAW \
             pbus-build bash ci/build.sh --platform=${{ matrix.platform }}
 
       - name: Run unit tests
@@ -39,6 +40,7 @@ jobs:
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
             --user $(id -u):$(id -g) \
+            --cap-add=NET_RAW \
             pbus-build ./${{ matrix.build_dir }}/src/tests/unit_tests
 
       - name: Prepare artifact name
