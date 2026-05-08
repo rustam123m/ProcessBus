@@ -8,6 +8,9 @@
 #include "dpdk_cpp/dpdk_poolsetter_class.hpp"
 #include "dpdk_cpp/dpdk_mempool_class.hpp"
 #include "dpdk_cpp/dpdk_info_class.hpp"
+#ifdef PLATFORM_ORANGEPI3B
+#  include "dpdk_cpp/udmabuf_heap.hpp"
+#endif
 
 #include "goose_traffic_gen.hpp"
 #include "sv_traffic_gen.hpp"
@@ -119,7 +122,7 @@ static void tx_packets_cycle(TxCycleConfig &conf, GenAppStat &stat, GenClass &ge
     }
     stat.procStat.MarkFinishCycling();
 
-    /* DPDK::Info::display_eth_stats(nicPortID); */
+    DPDK::Info::display_eth_stats(conf.nicPortID);
 }
 
 
@@ -179,11 +182,26 @@ void GenApplication::Run(StopVarType &doWork)
     // Memory pool for skeletons
     DPDK::Mempool pool("bus_gen_pool", MBUF_NUM, CACHE_NUM);
 
+#ifdef PLATFORM_ORANGEPI3B
+    /*
+     * Pull descriptor rings out of cacheable hugepages and into a CMA
+     * region mapped Normal/Non-Cacheable via u-dma-buf. RK3566's PCIe
+     * is not cache-coherent, so cacheable descriptor rings get clobbered
+     * at first wrap (~1024 packets). The heap survives until the
+     * UdmabufHeap object is destroyed, which is after the port closes.
+     */
+    DPDK::UdmabufHeap udmaHeap("udmabuf0");
+    const int descSocketID = udmaHeap.socket_id();
+#else
+    const int descSocketID = -1; // -1 → keep PortBuilder default (rte_socket_id)
+#endif
+
     uint16_t nicPortID = 0, nicQueueID = 0;
     DPDK::Port port = DPDK::PortBuilder(nicPortID)
                             .SetMemPool(pool.GetPtr())
                             .AdjustQueues(1, 1)
                             .SetDescriptors(RX_DESC_NUM, TX_DESC_NUM)
+                            .SetDescriptorSocketId(descSocketID)
                             .Build();
 
     // Start NIC port

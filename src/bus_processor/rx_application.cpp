@@ -5,6 +5,9 @@
 #include "dpdk_cpp/dpdk_poolsetter_class.hpp"
 #include "dpdk_cpp/dpdk_mempool_class.hpp"
 #include "dpdk_cpp/dpdk_info_class.hpp"
+#ifdef PLATFORM_ORANGEPI3B
+#  include "dpdk_cpp/udmabuf_heap.hpp"
+#endif
 
 #include "cxxopts.hpp"
 #include "pipeline_pbus.hpp"
@@ -397,12 +400,24 @@ void RX_Application::Run(StopVarType &doWork)
     // Create memory pool
     DPDK::Mempool pool("bus_proc_pool", MBUF_NUM, CACHE_NUM);
 
+#ifdef PLATFORM_ORANGEPI3B
+    /*
+     * Descriptor rings into uncached CMA via u-dma-buf — see comment in
+     * gen_application.cpp for rationale (RK3566 PCIe non-coherent).
+     */
+    DPDK::UdmabufHeap udmaHeap("udmabuf0");
+    const int descSocketID = udmaHeap.socket_id();
+#else
+    const int descSocketID = -1;
+#endif
+
     // Create Ethernet port
     uint16_t port_id = 0, queue_id = 0;
     DPDK::Port eth = DPDK::PortBuilder(port_id)
                             .SetMemPool(pool.GetPtr())
                             .AdjustQueues(1, 1)
                             .SetDescriptors(RX_DESC_NUM, TX_DESC_NUM)
+                            .SetDescriptorSocketId(descSocketID)
                             .Build();
 
     // Common information

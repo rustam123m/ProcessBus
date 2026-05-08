@@ -210,6 +210,17 @@ namespace DPDK
             return *this;
         }
 
+        /*
+         * Override the socket_id passed to rte_eth_{rx,tx}_queue_setup.
+         * Pass an external-heap socket_id (e.g. from UdmabufHeap) to put
+         * descriptor rings into a non-cacheable region on non-coherent
+         * ARM SoCs. Default (-1) keeps the existing rte_socket_id() path.
+         */
+        PortBuilder& SetDescriptorSocketId(int sid) {
+            m_descSocketID = sid;
+            return *this;
+        }
+
         Port Build() {
             if (m_mbufPool == nullptr) {
                 throw std::runtime_error("Mempool is not set!");
@@ -252,6 +263,9 @@ namespace DPDK
                 throw std::runtime_error("Can't adjust RX/TX descriptors");
             }
 
+            const int descSid = (m_descSocketID >= 0) ? m_descSocketID
+                                                      : static_cast<int>(rte_socket_id());
+
             for (uint16_t q=0;q<m_rxQueueNum;++q) {
                 rte_eth_rxconf *rxConf = &devInfo.default_rxconf;
                 rxConf->offloads = m_ethConf.rxmode.offloads;
@@ -259,7 +273,7 @@ namespace DPDK
                 if (rte_eth_rx_queue_setup(m_portID,
                                            q,
                                            m_rxDescNum,
-                                           rte_socket_id(),
+                                           descSid,
                                            rxConf,
                                            m_mbufPool) != 0) {
                     throw std::runtime_error("RX queue setup failed");
@@ -273,7 +287,7 @@ namespace DPDK
                 if (rte_eth_tx_queue_setup(m_portID,
                                            q,
                                            m_txDescNum,
-                                           rte_socket_id(),
+                                           descSid,
                                            txConf) != 0) {
                     throw std::runtime_error("TX queue setup failed");
                 }
@@ -293,6 +307,7 @@ namespace DPDK
                         m_txQueueNum = 0;
         uint16_t        m_rxDescNum = 1024,
                         m_txDescNum = 1024;
+        int             m_descSocketID = -1;   // -1 → use rte_socket_id()
         bool            m_timestamping = false;
     };
 }
