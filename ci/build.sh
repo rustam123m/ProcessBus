@@ -1,22 +1,29 @@
 #!/bin/bash
 # Building generator and processor for ProcessBus
 
-set -e # Exit on error
+set -e          # Exit on error
+set -o pipefail # Don't let a successful tail/grep mask an upstream failure
 
 SCRIPT_PATH="$(dirname "$(realpath "$0")")"
 REPO_DIR="$SCRIPT_PATH/../"
 DPDK_DIR="$REPO_DIR/3rdparty/dpdk/"
-DPDK_INSTALL="$DPDK_DIR/build/install/"
-DPDK_PKGCONFIG="$DPDK_INSTALL/lib/pkgconfig/"
+# DPDK_BUILD / DPDK_INSTALL / DPDK_PKGCONFIG are per-platform — set in
+# configure_platform() so x86 and arm64 builds can coexist on the same
+# host without stomping each other's build/install dirs.
 
 PLATFORM=atom
 OPT_UPDATE_SRC=1
 OPT_BUILD_DPDK=1
 OPT_BUILD_PBUS=1
 OPT_REBUILD=0
+ACTION=""
 
 # Per-platform settings
 configure_platform() {
+    DPDK_CROSS_FILE=""
+    CMAKE_TOOLCHAIN=""
+    DOCKERFILE="$SCRIPT_PATH/Dockerfile.debian"
+    BUILDER_IMAGE="pbus_builder"
     case "$PLATFORM" in
         atom)
             TARGET_PROCESSOR=atom
@@ -30,22 +37,31 @@ configure_platform() {
             BUILD_DIR="$REPO_DIR/build-qemu/"
             INSTALL_DIR="$REPO_DIR/install-qemu/"
             ;;
-        arm64)
-            TARGET_PROCESSOR=generic
-            DPDK_DRIVERS="net_af_xdp,net_af_packet,net_tap,net_ring"
-            BUILD_DIR="$REPO_DIR/build-arm64/"
-            INSTALL_DIR="$REPO_DIR/install-arm64/"
+        orangepi3b)
+            TARGET_PROCESSOR=generic   # overridden by --cross-file
+            DPDK_DRIVERS="net_igc,net_af_packet,net_tap,net_ring"
+            BUILD_DIR="$REPO_DIR/build-orangepi3b/"
+            INSTALL_DIR="$REPO_DIR/install-orangepi3b/"
+            DPDK_CROSS_FILE="$SCRIPT_PATH/dpdk-orangepi3b.cross"
+            CMAKE_TOOLCHAIN="$SCRIPT_PATH/cmake-orangepi3b.toolchain"
+            DOCKERFILE="$SCRIPT_PATH/Dockerfile.debian-arm64"
+            BUILDER_IMAGE="pbus_builder_arm64"
             ;;
         *)
             echo "Unknown platform: $PLATFORM"
             exit 1
             ;;
     esac
+
+    # Per-platform DPDK build/install — keeps x86 and arm64 outputs separate.
+    DPDK_BUILD="$DPDK_DIR/build-$PLATFORM/"
+    DPDK_INSTALL="$DPDK_BUILD/install/"
+    DPDK_PKGCONFIG="$DPDK_INSTALL/lib/pkgconfig/"
 }
 
 function usage()
 {
-    echo "Usage: $0 [--platform=atom/qemu/arm64/all] [--update=0/1] [--dpdk=0/1] [--pbus=0/1] [--rebuild] [--clean] [--check] [--setup] [--shell]"
+    echo "Usage: $0 [--platform=atom/qemu/orangepi3b/all] [--update=0/1] [--dpdk=0/1] [--pbus=0/1] [--rebuild] [--clean] [--check] [--setup] [--shell]"
     exit 1
 }
 
@@ -78,23 +94,29 @@ function prepare_sources()
 
 function build_dpdk()
 {
-    cd $DPDK_DIR
-    rm -rf build/
+    cd "$DPDK_DIR"
+    rm -rf "$DPDK_BUILD"
 
-    # Building DPDK with platform-specific settings
-    meson setup build \
-        --prefix="$DPDK_DIR/build/install/" \
-        -Dlibdir=lib \
-        -Dmachine=$TARGET_PROCESSOR \
-        -Ddefault_library=static \
-        -Dbuildtype=release \
-        -Dmax_numa_nodes=1 \
-        -Ddisable_drivers=all \
-        -Denable_drivers=$DPDK_DRIVERS
+    local meson_args=(
+        --prefix="$DPDK_INSTALL"
+        -Dlibdir=lib
+        -Ddefault_library=static
+        -Dbuildtype=release
+        -Dmax_numa_nodes=1
+        -Ddisable_drivers=all
+        -Denable_drivers="$DPDK_DRIVERS"
+    )
+    if [[ -n "$DPDK_CROSS_FILE" ]]; then
+        # Cross-build: cross file owns -Dmachine and toolchain.
+        meson_args+=(--cross-file="$DPDK_CROSS_FILE")
+    else
+        meson_args+=(-Dmachine="$TARGET_PROCESSOR")
+    fi
+    meson setup "$DPDK_BUILD" "${meson_args[@]}"
 
     # Install
-    ninja -C build
-    ninja -C build install
+    ninja -C "$DPDK_BUILD"
+    ninja -C "$DPDK_BUILD" install
 
     # Hack to force static linking
     rm -rf "$DPDK_INSTALL"/lib/*.so
@@ -125,15 +147,25 @@ function build_apps()
 
     export PKG_CONFIG_PATH="$DPDK_PKGCONFIG:$PKG_CONFIG_PATH"
 
-    cmake -S ./ -B "$BUILD_DIR" \
-        -DPLATFORM=$PLATFORM \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DBUILD_TESTS=ON \
-        -DBUILD_SAMPLES=OFF \
-        -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
-        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-        -DCMAKE_CXX_FLAGS_RELEASE="-O3" \
+    local cmake_args=(
+        -S ./
+        -B "$BUILD_DIR"
+        -DPLATFORM="$PLATFORM"
+        -DCMAKE_BUILD_TYPE=Release
+        -DBUILD_TESTS=ON
+        -DBUILD_SAMPLES=OFF
+        -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR"
+        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+        -DCMAKE_CXX_FLAGS_RELEASE="-O3"
         -DCMAKE_C_FLAGS_RELEASE="-O3"
+    )
+    if [[ -n "$CMAKE_TOOLCHAIN" ]]; then
+        cmake_args+=(-DCMAKE_TOOLCHAIN_FILE="$CMAKE_TOOLCHAIN")
+        # When cross-building, also disable tests by default — they target host arch.
+        cmake_args+=(-DBUILD_TESTS=OFF)
+    fi
+
+    cmake "${cmake_args[@]}"
 
     rebuild_and_install
 }
@@ -187,33 +219,44 @@ while [[ "$#" -gt 0 ]]; do
             OPT_BUILD_PBUS=0
             OPT_REBUILD=1
             ;;
-        --clean)
-            echo "Cleaning build artifacts..."
-            rm -rf "$BUILD_DIR" "$INSTALL_DIR" "$DPDK_DIR/build/"
-            echo "Re-initializing submodules..."
-            git submodule deinit -f --all
-            git submodule update --init --recursive
-            echo "Clean done"
-            exit 0
-            ;;
-        --check)
-            check_code
-            exit 0
-            ;;
-        --setup)
-            podman build -f "$SCRIPT_PATH/Dockerfile.debian" --tag pbus_builder
-            exit 0
-            ;;
-        --shell)
-            podman run -it --rm --cap-add=NET_RAW \
-                -v "$(realpath "$REPO_DIR"):/ProcessBus/:Z" \
-                --userns=keep-id --name pbus_builder pbus_builder /bin/bash
-            exit 0
+        --clean|--check|--setup|--shell)
+            ACTION="${1#--}"
             ;;
         *) usage;;
     esac
     shift
 done
+
+# Dispatch deferred actions after parsing all options (so --platform= is honoured).
+case "$ACTION" in
+    clean)
+        configure_platform
+        echo "Cleaning build artifacts for platform: $PLATFORM"
+        rm -rf "$BUILD_DIR" "$INSTALL_DIR" "$DPDK_BUILD"
+        echo "Re-initializing submodules..."
+        git submodule deinit -f --all
+        git submodule update --init --recursive
+        echo "Clean done"
+        exit 0
+        ;;
+    check)
+        configure_platform
+        check_code
+        exit 0
+        ;;
+    setup)
+        configure_platform
+        podman build -f "$DOCKERFILE" --tag "$BUILDER_IMAGE" "$SCRIPT_PATH/.."
+        exit 0
+        ;;
+    shell)
+        configure_platform
+        podman run -it --rm --cap-add=NET_RAW \
+            -v "$(realpath "$REPO_DIR"):/ProcessBus/:Z" \
+            --userns=keep-id --name "$BUILDER_IMAGE" "$BUILDER_IMAGE" /bin/bash
+        exit 0
+        ;;
+esac
 
 ALL_PLATFORMS="atom qemu"
 

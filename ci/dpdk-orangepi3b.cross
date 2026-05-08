@@ -1,0 +1,31 @@
+# Meson cross-file for DPDK on Orange Pi 3B (Rockchip RK3566 / Cortex-A55).
+#
+# DPDK 25.03 requires a `platform` external property in cross-builds; it
+# must match one of the soc_* entries in config/arm/meson.build. There
+# is no Rockchip / Cortex-A55 SoC entry, so we use 'generic' (portable
+# armv8-a + crc + -moutline-atomics). Cortex-A55 tuning still reaches
+# the compiler via the c_args/cpp_args below; pbus and libiec61850 use
+# them via the cmake toolchain regardless. Performance tuning is out
+# of scope for this bring-up.
+
+[binaries]
+c           = 'aarch64-linux-gnu-gcc'
+cpp         = 'aarch64-linux-gnu-g++'
+ar          = 'aarch64-linux-gnu-ar'
+strip       = 'aarch64-linux-gnu-strip'
+pkgconfig   = 'aarch64-linux-gnu-pkg-config'
+pcap-config = ''
+
+[host_machine]
+system     = 'linux'
+cpu_family = 'aarch64'
+cpu        = 'armv8-a'
+endian     = 'little'
+
+[properties]
+platform = 'generic'
+
+[built-in options]
+c_args      = ['-mcpu=cortex-a55']
+cpp_args    = ['-mcpu=cortex-a55']
+c_link_args = []

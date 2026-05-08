@@ -1,0 +1,45 @@
+FROM debian:13
+
+# Add arm64 architecture for cross sysroot dev libs
+RUN dpkg --add-architecture arm64
+
+# Host tools + cross toolchain.
+RUN apt-get update && apt-get -y --no-install-recommends install \
+    ranger vim sudo bash wget \
+    coreutils git make cppcheck clang-tidy \
+    meson ninja-build cmake pkg-config \
+    pciutils python3 python3-pip python3-pyelftools \
+    elfutils file \
+    openssh-client sshpass \
+    gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Cross pkg-config wrapper: routes pkg-config to the arm64 sysroot.
+# Trixie has no per-arch pkg-config binary — verified 2026-05-07,
+# `apt install pkg-config-aarch64-linux-gnu` fails with "unable to
+# locate". So we keep the wrapper.
+RUN printf '#!/bin/sh\nexport PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/aarch64-linux-gnu/lib/pkgconfig\nexport PKG_CONFIG_SYSROOT_DIR=\nexec pkg-config "$@"\n' \
+        > /usr/local/bin/aarch64-linux-gnu-pkg-config \
+    && chmod +x /usr/local/bin/aarch64-linux-gnu-pkg-config
+
+# Cross sysroot dev libs (:arm64). libnuma is the only hard DPDK dep;
+# the rest are for optional PMDs (af_xdp, pcap) we may enable later.
+RUN apt-get update && apt-get -y --no-install-recommends install \
+    libnuma-dev:arm64 libelf-dev:arm64 \
+    libpcap-dev:arm64 libbpf-dev:arm64 libxdp-dev:arm64 \
+    libbsd-dev:arm64 libatomic1:arm64 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Make the cross pkg-config the default when PKG_CONFIG_LIBDIR is set
+ENV PKG_CONFIG=aarch64-linux-gnu-pkg-config
+
+# Builder user with passwordless sudo
+RUN useradd -m -s /bin/bash builder \
+    && echo "builder:builder" | chpasswd \
+    && usermod -aG sudo builder \
+    && echo "builder ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/builder
+
+WORKDIR /ProcessBus
+USER builder
+
+CMD ["/bin/bash"]
