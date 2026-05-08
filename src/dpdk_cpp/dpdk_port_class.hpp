@@ -75,7 +75,7 @@ namespace DPDK
             }
         }
 
-        bool WaitLink(unsigned sec) {
+        bool WaitLink(unsigned sec = 60) {
             rte_eth_link link;
             for (unsigned i=0;i<sec;++i) {
                 int retval = rte_eth_link_get_nowait(m_portID, &link);

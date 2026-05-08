@@ -60,10 +60,10 @@ namespace
         // Start NIC port
         eth.SetAllMulticast();
         eth.Start();
-        if (!eth.WaitLink(10)) {
+        if (!eth.WaitLink()) {
             g_doWork = false;
 
-            throw std::runtime_error("Link is still down after 10 sec...");
+            throw std::runtime_error("Link is still down after 60 sec...");
         }
 
         // Link info
@@ -137,10 +137,10 @@ namespace
         // Start NIC port
         eth.SetAllMulticast();
         eth.Start();
-        if (!eth.WaitLink(10)) {
+        if (!eth.WaitLink()) {
             g_doWork = false;
 
-            throw std::runtime_error("Link is still down after 10 sec...");
+            throw std::runtime_error("Link is still down after 60 sec...");
         }
 
         // Link info

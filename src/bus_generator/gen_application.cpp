@@ -166,7 +166,7 @@ GenApplication::GenApplication(int argc, char *argv[])
 
 void GenApplication::DisplayStatistic()
 {
-    Console::CyclicStat::PrintTableHeader({"No-mbuf"});
+    Console::CyclicStat::PrintTableHeader({"TxRingFull"});
     Console::CyclicStat::PrintTableRow("Main", m_stat.procStat)
                       << std::format(" {:<10} |\n", m_stat.errSendCnt);
 }
@@ -206,8 +206,8 @@ void GenApplication::Run(StopVarType &doWork)
 
     // Start NIC port
     port.Start();
-    if (!port.WaitLink(10)) {
-        throw std::runtime_error("Link is still down after 10 sec...");
+    if (!port.WaitLink()) {
+        throw std::runtime_error("Link is still down after 60 sec...");
     }
     // Link info
     std::cout << port << "\n";

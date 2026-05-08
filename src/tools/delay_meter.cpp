@@ -173,7 +173,7 @@ static void delay_meter(int argc, char *argv[])
 
     portTx.Start();
     portRx.Start();
-    if ( !(portTx.WaitLink(10) && portRx.WaitLink(10)) ) {
+    if ( !(portTx.WaitLink() && portRx.WaitLink()) ) {
         rte_exit(EXIT_FAILURE, "Link is down!");
     }
 
