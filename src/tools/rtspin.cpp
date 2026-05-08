@@ -23,9 +23,17 @@ static void pin_thread_to_cpu(int cpu, int priority)
 
 static inline uint64_t rdtsc()
 {
+#if defined(__x86_64__) || defined(__i386__)
     unsigned hi, lo;
     asm volatile("rdtsc" : "=a"(lo), "=d"(hi));
     return ((uint64_t)hi << 32) | lo;
+#elif defined(__aarch64__)
+    uint64_t v;
+    asm volatile("mrs %0, cntvct_el0" : "=r"(v));
+    return v;
+#else
+#   error "rdtsc(): unsupported architecture"
+#endif
 }
 
 int main(int argc, char* argv[])
