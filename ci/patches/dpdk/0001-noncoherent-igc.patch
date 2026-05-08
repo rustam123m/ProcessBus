@@ -3,61 +3,32 @@ index 1e66434b6b..2848cc0b80 100644
 --- a/config/arm/meson.build
 +++ b/config/arm/meson.build
 @@ -735,6 +735,10 @@ socs = {
- 
+
  dpdk_conf.set('RTE_ARCH_ARM', 1)
  dpdk_conf.set('RTE_FORCE_INTRINSICS', 1)
 +if get_option('noncoherent_dma')
 +    dpdk_conf.set('RTE_ARM64_NONCOHERENT_DMA', 1)
 +    message('aarch64: emitting explicit cache maintenance for non-coherent DMA')
 +endif
- 
+
  update_flags = false
  soc_flags = []
 diff --git a/drivers/net/intel/igc/igc_txrx.c b/drivers/net/intel/igc/igc_txrx.c
-index fabab5b1a3..0ff87f8158 100644
+index fabab5b1a3..0123456789 100644
 --- a/drivers/net/intel/igc/igc_txrx.c
 +++ b/drivers/net/intel/igc/igc_txrx.c
-@@ -7,6 +7,9 @@
+@@ -7,6 +7,7 @@
  #include <rte_malloc.h>
  #include <ethdev_driver.h>
  #include <rte_net.h>
-+#ifdef RTE_ARCH_ARM64
 +#include <rte_arm_dma.h>
-+#endif
- 
+
  #include "igc_logs.h"
  #include "igc_txrx.h"
-@@ -261,6 +264,13 @@ igc_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
- 		 * using invalid descriptor fields when read from rxd.
- 		 */
- 		rxdp = &rx_ring[rx_id];
-+		/* Non-coherent DMA: invalidate the descriptor cache line so
-+		 * the CPU sees the device's write-back instead of stale
-+		 * pre-receive contents. civac (in rte_arm_dma_invalidate)
-+		 * also writes back any pending refill writes from a prior
-+		 * iteration that share this 64-byte line. No-op if coherent.
-+		 */
-+		rte_arm_dma_invalidate((const void *)rxdp, sizeof(*rxdp));
- 		staterr = rte_cpu_to_le_32(rxdp->wb.upper.status_error);
- 		if (!(staterr & IGC_RXD_STAT_DD))
- 			break;
-@@ -343,6 +353,12 @@ igc_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
- 			rxdp->read.pkt_addr =
- 			rte_cpu_to_le_64(rte_mbuf_data_iova_default(nmb));
- 
-+		/* Non-coherent DMA: clean the refilled descriptor so the
-+		 * NIC reads the new buffer address from DRAM, not stale
-+		 * cache. No-op when coherent.
-+		 */
-+		rte_arm_dma_clean((const void *)rxdp, sizeof(*rxdp));
-+
- 		rxm->next = NULL;
- 
- 		rxm->data_off = RTE_PKTMBUF_HEADROOM;
-@@ -358,6 +374,14 @@ igc_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
+@@ -358,6 +359,14 @@ igc_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
  		rxm->pkt_len = data_len;
  		rxm->nb_segs = 1;
- 
+
 +		/* Non-coherent DMA: invalidate payload bytes the device
 +		 * just DMA-wrote so the consumer sees fresh data, not
 +		 * stale cache. Use full pkt_len (covers timestamp prefix
@@ -67,9 +38,9 @@ index fabab5b1a3..0ff87f8158 100644
 +				       rxm->data_len);
 +
  		rx_desc_get_pkt_info(rxq, rxm, &rxd, staterr);
- 
+
  		if (rxq->offloads & RTE_ETH_RX_OFFLOAD_TIMESTAMP) {
-@@ -391,6 +415,10 @@ igc_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
+@@ -391,6 +400,10 @@ igc_recv_pkts(void *rx_queue, struct rte_mbuf **rx_pkts, uint16_t nb_pkts)
  			"port_id=%u queue_id=%u rx_tail=%u nb_hold=%u nb_rx=%u",
  			rxq->port_id, rxq->queue_id, rx_id, nb_hold, nb_rx);
  		rx_id = (rx_id == 0) ? (rxq->nb_rx_desc - 1) : (rx_id - 1);
@@ -80,32 +51,10 @@ index fabab5b1a3..0ff87f8158 100644
  		IGC_PCI_REG_WRITE(rxq->rdt_reg_addr, rx_id);
  		nb_hold = 0;
  	}
-@@ -431,6 +459,11 @@ igc_recv_scattered_pkts(void *rx_queue, struct rte_mbuf **rx_pkts,
- 		 * using invalid descriptor fields when read from rxd.
- 		 */
- 		rxdp = &rx_ring[rx_id];
-+		/* Non-coherent DMA: invalidate before reading device
-+		 * write-back. civac preserves any pending refill writes
-+		 * sharing this 64-byte line. No-op when coherent.
-+		 */
-+		rte_arm_dma_invalidate((const void *)rxdp, sizeof(*rxdp));
- 		staterr = rte_cpu_to_le_32(rxdp->wb.upper.status_error);
- 		if (!(staterr & IGC_RXD_STAT_DD))
- 			break;
-@@ -509,6 +542,9 @@ igc_recv_scattered_pkts(void *rx_queue, struct rte_mbuf **rx_pkts,
- 			rxdp->read.pkt_addr =
- 			rte_cpu_to_le_64(rte_mbuf_data_iova_default(nmb));
- 
-+		/* Non-coherent DMA: clean refilled descriptor. */
-+		rte_arm_dma_clean((const void *)rxdp, sizeof(*rxdp));
-+
- 		rxm->next = NULL;
- 
- 		/*
-@@ -536,6 +572,14 @@ igc_recv_scattered_pkts(void *rx_queue, struct rte_mbuf **rx_pkts,
+@@ -536,6 +549,14 @@ igc_recv_scattered_pkts(void *rx_queue, struct rte_mbuf **rx_pkts,
  		}
  		rxm->data_len = data_len;
- 
+
 +		/* Non-coherent DMA: invalidate this segment's payload bytes
 +		 * the device just DMA-wrote. Each segment is invalidated
 +		 * separately because they map to different mbufs. No-op
@@ -117,7 +66,7 @@ index fabab5b1a3..0ff87f8158 100644
  		/*
  		 * If this is the first buffer of the received packet,
  		 * set the pointer to the first mbuf of the packet and
-@@ -631,6 +675,8 @@ igc_recv_scattered_pkts(void *rx_queue, struct rte_mbuf **rx_pkts,
+@@ -631,6 +652,8 @@ igc_recv_scattered_pkts(void *rx_queue, struct rte_mbuf **rx_pkts,
  			"port_id=%u queue_id=%u rx_tail=%u nb_hold=%u nb_rx=%u",
  			rxq->port_id, rxq->queue_id, rx_id, nb_hold, nb_rx);
  		rx_id = (rx_id == 0) ? (rxq->nb_rx_desc - 1) : (rx_id - 1);
@@ -126,151 +75,53 @@ index fabab5b1a3..0ff87f8158 100644
  		IGC_PCI_REG_WRITE(rxq->rdt_reg_addr, rx_id);
  		nb_hold = 0;
  	}
-@@ -684,6 +730,8 @@ uint32_t eth_igc_rx_queue_count(void *rx_queue)
- 	rxdp = &rxq->rx_ring[rxq->rx_tail];
- 
- 	while (desc < rxq->nb_rx_desc - rxq->rx_tail) {
-+		/* Non-coherent DMA: invalidate before DD read. */
-+		rte_arm_dma_invalidate((const void *)rxdp, sizeof(*rxdp));
- 		if (unlikely(!(rxdp->wb.upper.status_error &
- 				IGC_RXD_STAT_DD)))
- 			return desc;
-@@ -692,8 +740,10 @@ uint32_t eth_igc_rx_queue_count(void *rx_queue)
- 	}
- 	rxdp = &rxq->rx_ring[rxq->rx_tail + desc - rxq->nb_rx_desc];
- 
--	while (desc < rxq->nb_rx_desc &&
--		(rxdp->wb.upper.status_error & IGC_RXD_STAT_DD)) {
-+	while (desc < rxq->nb_rx_desc) {
-+		rte_arm_dma_invalidate((const void *)rxdp, sizeof(*rxdp));
-+		if (!(rxdp->wb.upper.status_error & IGC_RXD_STAT_DD))
-+			break;
- 		desc += IGC_RXQ_SCAN_INTERVAL;
- 		rxdp += IGC_RXQ_SCAN_INTERVAL;
- 	}
-@@ -718,6 +768,9 @@ int eth_igc_rx_descriptor_status(void *rx_queue, uint16_t offset)
- 		desc -= rxq->nb_rx_desc;
- 
- 	status = &rxq->rx_ring[desc].wb.upper.status_error;
-+	/* Non-coherent DMA: invalidate before reading device write-back. */
-+	rte_arm_dma_invalidate((const void *)&rxq->rx_ring[desc],
-+			       sizeof(rxq->rx_ring[desc]));
- 	if (*status & rte_cpu_to_le_32(IGC_RXD_STAT_DD))
- 		return RTE_ETH_RX_DESC_DONE;
- 
-@@ -751,6 +804,13 @@ igc_alloc_rx_queue_mbufs(struct igc_rx_queue *rxq)
- 		rxe[i].mbuf = mbuf;
- 	}
- 
-+	/* Non-coherent DMA: ensure the entire RX ring is in DRAM before
-+	 * the device starts fetching descriptors. No-op when coherent.
-+	 */
-+	rte_arm_dma_clean((const void *)rxq->rx_ring,
-+			  rxq->nb_rx_desc * sizeof(*rxq->rx_ring));
-+	rte_arm_dma_dsb();
-+
- 	return 0;
- }
- 
-@@ -1690,7 +1750,13 @@ igc_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
- 
- 		/*
- 		 * Check that this descriptor is free.
-+		 *
-+		 * On non-coherent aarch64 the device writes back the DD bit
-+		 * directly to DRAM; without an invalidate the CPU may keep
-+		 * seeing a stale 0 forever. No-op on coherent platforms.
- 		 */
-+		rte_arm_dma_invalidate((const void *)&txr[tx_end],
-+				       sizeof(txr[tx_end]));
- 		if (!(txr[tx_end].wb.status & IGC_TXD_STAT_DD)) {
- 			if (nb_tx == 0)
- 				return 0;
-@@ -1758,6 +1824,12 @@ igc_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
- 						tx_ol_req, tx_offload, 0);
- 				}
- 
-+				/* Non-coherent DMA: flush context descriptor.
-+				 * No-op on coherent builds.
-+				 */
-+				rte_arm_dma_clean((const void *)ctx_txd,
-+						  sizeof(*ctx_txd));
-+
- 				txe->last_id = tx_last;
- 				tx_id = txe->next_id;
- 				txe = txn;
-@@ -1792,6 +1864,17 @@ igc_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
+@@ -1792,6 +1815,15 @@ igc_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
  				rte_cpu_to_le_32(cmd_type_len | slen);
  			txd->read.olinfo_status =
  				rte_cpu_to_le_32(olinfo_status);
 +
-+			/* Non-coherent DMA: clean the payload and descriptor
-+			 * so the NIC reads fresh bytes when it fetches via
-+			 * PCIe. The final descriptor is cleaned a second
-+			 * time below after EOP/RS are OR-ed in. Both are
-+			 * no-ops on coherent builds.
++			/* Non-coherent DMA: clean payload bytes so the NIC
++			 * reads fresh data when it fetches via PCIe. Descriptor
++			 * lives in non-cacheable u-dma-buf memory and needs
++			 * no clean. No-op when coherent.
 +			 */
 +			rte_arm_dma_clean(rte_pktmbuf_mtod(m_seg, void *),
 +					  slen);
-+			rte_arm_dma_clean((const void *)txd, sizeof(*txd));
 +
  			txe->last_id = tx_last;
  			tx_id = txe->next_id;
  			txe = txn;
-@@ -1804,9 +1887,16 @@ igc_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
- 		 */
- 		txd->read.cmd_type_len |=
+@@ -1806,7 +1838,13 @@ igc_xmit_pkts(void *tx_queue, struct rte_mbuf **tx_pkts, uint16_t nb_pkts)
  			rte_cpu_to_le_32(IGC_TXD_CMD_EOP | IGC_TXD_CMD_RS);
-+		rte_arm_dma_clean((const void *)txd, sizeof(*txd));
  	}
  end_of_tx:
-+	/* Non-coherent DMA: ensure all descriptor + payload writes have
-+	 * drained to DRAM before the doorbell write below. dsb sy is a
-+	 * superset of rte_wmb's dmb ish for this purpose; on coherent
-+	 * builds rte_arm_dma_dsb() is a no-op and rte_wmb() does its job.
++	/* Non-coherent DMA: ensure payload + descriptor stores have drained
++	 * to DRAM before the doorbell write below. dsb sy is a superset of
++	 * rte_wmb's dmb ish; on coherent builds rte_arm_dma_dsb() is a no-op
++	 * and rte_wmb() does its job.
 +	 */
  	rte_wmb();
 +	rte_arm_dma_dsb();
- 
+
  	/*
  	 * Set the Transmit Descriptor Tail (TDT).
-@@ -1833,6 +1923,9 @@ int eth_igc_tx_descriptor_status(void *tx_queue, uint16_t offset)
- 		desc -= txq->nb_tx_desc;
- 
- 	status = &txq->tx_ring[desc].wb.status;
-+	/* Non-coherent DMA: invalidate before reading device write-back. */
-+	rte_arm_dma_invalidate((const void *)&txq->tx_ring[desc],
-+			       sizeof(txq->tx_ring[desc]));
- 	if (*status & rte_cpu_to_le_32(IGC_TXD_STAT_DD))
- 		return RTE_ETH_TX_DESC_DONE;
- 
-@@ -2066,6 +2159,9 @@ eth_igc_tx_done_cleanup(void *txqueue, uint32_t free_cnt)
- 		tx_last = sw_ring[tx_id].last_id;
- 
- 		if (sw_ring[tx_last].mbuf) {
-+			/* Non-coherent DMA: invalidate before DD read. */
-+			rte_arm_dma_invalidate((const void *)&txr[tx_last],
-+					       sizeof(txr[tx_last]));
- 			if (!(txr[tx_last].wb.status &
- 					rte_cpu_to_le_32(IGC_TXD_STAT_DD)))
- 				break;
-diff --git a/lib/eal/arm/include/meson.build b/lib/eal/arm/include/meson.build
-index 657bf58569..4f49f234dc 100644
---- a/lib/eal/arm/include/meson.build
-+++ b/lib/eal/arm/include/meson.build
-@@ -2,6 +2,7 @@
- # Copyright(c) 2017 Intel Corporation.
- 
- arch_headers = files(
+diff --git a/lib/eal/include/meson.build b/lib/eal/include/meson.build
+index aaaaaaaaaa..bbbbbbbbbb 100644
+--- a/lib/eal/include/meson.build
++++ b/lib/eal/include/meson.build
+@@ -6,6 +6,7 @@ includes += include_directories('.')
+
+ headers += files(
+         'rte_alarm.h',
 +        'rte_arm_dma.h',
-         'rte_atomic_32.h',
-         'rte_atomic_64.h',
-         'rte_atomic.h',
-diff --git a/lib/eal/arm/include/rte_arm_dma.h b/lib/eal/arm/include/rte_arm_dma.h
+         'rte_bitmap.h',
+         'rte_bitops.h',
+         'rte_bitset.h',
+diff --git a/lib/eal/include/rte_arm_dma.h b/lib/eal/include/rte_arm_dma.h
 new file mode 100644
 index 0000000000..0a7395a0c0
 --- /dev/null
-+++ b/lib/eal/arm/include/rte_arm_dma.h
++++ b/lib/eal/include/rte_arm_dma.h
 @@ -0,0 +1,114 @@
 +/* SPDX-License-Identifier: BSD-3-Clause
 + * Copyright(c) 2026 ProcessBus contributors
