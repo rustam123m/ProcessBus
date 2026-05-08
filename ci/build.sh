@@ -76,20 +76,27 @@ function prepare_sources()
     tar xzf "$MBEDTLS_DIR/mbedtls.tar.gz" -C "$MBEDTLS_DIR"
     rm "$MBEDTLS_DIR/mbedtls.tar.gz"
 
-    # Apply patches to libiec61850
-    local lib_dir="$REPO_DIR/3rdparty/libiec61850"
-    local patch_dir="$SCRIPT_PATH/patches"
-    if [ -d "$patch_dir" ]; then
-        for patch in "$patch_dir"/*.patch; do
-            [ -f "$patch" ] || continue
-            if git -C "$lib_dir" apply --check "$patch" 2>/dev/null; then
-                echo "Applying: $(basename $patch)"
-                git -C "$lib_dir" apply "$patch"
-            else
-                echo "Already applied: $(basename $patch)"
-            fi
-        done
-    fi
+    # Apply our patches over pristine submodule sources. Patches are
+    # grouped per submodule under ci/patches/<submodule-name>/ so each
+    # set is applied to the matching source tree.
+    apply_patches "$REPO_DIR/3rdparty/libiec61850" "$SCRIPT_PATH/patches/libiec61850"
+    apply_patches "$REPO_DIR/3rdparty/dpdk"        "$SCRIPT_PATH/patches/dpdk"
+}
+
+function apply_patches()
+{
+    local target_dir="$1"
+    local patch_dir="$2"
+    [ -d "$patch_dir" ] || return 0
+    for patch in "$patch_dir"/*.patch; do
+        [ -f "$patch" ] || continue
+        if git -C "$target_dir" apply --check "$patch" 2>/dev/null; then
+            echo "Applying $(basename $patch) to $(basename $target_dir)"
+            git -C "$target_dir" apply "$patch"
+        else
+            echo "Already applied: $(basename $patch)"
+        fi
+    done
 }
 
 function build_dpdk()
@@ -112,6 +119,12 @@ function build_dpdk()
     else
         meson_args+=(-Dmachine="$TARGET_PROCESSOR")
     fi
+    # OrangePi 3B's RK3566 PCIe is not cache-coherent — patched igc PMD
+    # emits dc cvac/civac + dsb sy in fast paths. No-op on other SoCs.
+    if [[ "$PLATFORM" == "orangepi3b" ]]; then
+        meson_args+=(-Dnoncoherent_dma=true)
+    fi
+
     meson setup "$DPDK_BUILD" "${meson_args[@]}"
 
     # Install
