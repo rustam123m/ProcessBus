@@ -30,8 +30,11 @@ link_directories(${DPDK_STATIC_LIBRARY_DIRS})
 add_subdirectory(3rdparty/)
 
 # Platform-specific compiler flags
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${TARGET_ARCH_FLAGS}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TARGET_ARCH_FLAGS} -fno-strict-aliasing -Wno-unused-result -Wno-volatile")
+# -fno-omit-frame-pointer: keep X29 (aarch64) / RBP (x86) usable as a frame
+# pointer so `perf record -g` can walk call stacks. GCC defaults to omit
+# at -O3. Cost: one stp/ldp per non-leaf call — negligible on hot paths.
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${TARGET_ARCH_FLAGS} -fno-omit-frame-pointer")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TARGET_ARCH_FLAGS} -fno-strict-aliasing -Wno-unused-result -Wno-volatile -fno-omit-frame-pointer")
 
 # DPDK's related functions
 function(setup_dpdk TARGET_NAME)
