@@ -269,6 +269,12 @@ namespace DPDK
             for (uint16_t q=0;q<m_rxQueueNum;++q) {
                 rte_eth_rxconf *rxConf = &devInfo.default_rxconf;
                 rxConf->offloads = m_ethConf.rxmode.offloads;
+#ifdef PLATFORM_ORANGEPI3B
+                // RK3566 has no PCIe cache coherency: descriptors live in NC
+                // memory, every CPU-side read is a DRAM hit. Coalesce NIC
+                // writeback to 8 descriptors at once (default 4).
+                rxConf->rx_thresh.wthresh = 8;
+#endif
 
                 if (rte_eth_rx_queue_setup(m_portID,
                                            q,
