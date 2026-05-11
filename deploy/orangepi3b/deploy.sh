@@ -13,7 +13,7 @@ DPDK_DEVBIND="$REPO_DIR/3rdparty/dpdk/usertools/dpdk-devbind.py"
 BUNDLE="$SCRIPT_DIR/pbus"
 SENTINEL="/var/run/pbus_rt"
 
-HOST="${HOST:-192.168.1.141}"
+HOST="${HOST:-192.168.100.105}"
 USER="${USER_:-jarvis}"
 REMOTE_DIR="/home/jarvis/pbus"
 
