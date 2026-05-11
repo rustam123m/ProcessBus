@@ -27,50 +27,59 @@ This repository contains a proof-of-concept that combines five key ideas:
 
 5. **rtspin:** A tool to consume the entire CPU time by running a thread with maximum priority.
 
+6. **rx_counter:** A pure RX-path counter (`rx_burst` → `free_bulk`, no parsing). Use as a baseline against `bus_processor` to tell whether the bottleneck is the app or the PMD/NIC/PCIe.
+
 ## Platforms
 
 - **QEMU VM** for functional validation — see [deploy/qemu/README.md](deploy/qemu/README.md)
 - **Qotom Intel Atom** servers, bare metal with PREEMPT_RT — see [deploy/qotom/README.md](deploy/qotom/README.md)
-- **ARM64** (e.g. RockChip) — planned
+- **OrangePi 3B** (RockChip RK3566, aarch64) with PREEMPT_RT — see [deploy/orangepi3b/README.md](deploy/orangepi3b/README.md)
 
 ## How to Build Applications
 
-`(by using special Docker container ci/Dockerfile.debian)`
+Builds run inside a Debian container so the host's toolchain does not matter. The script `ci/build.sh` selects the right container and toolchain per platform via `--platform=`:
 
-The script `ci/build.sh` builds:
+- `--platform=atom` → `ci/Dockerfile.debian` (x86_64, native)
+- `--platform=qemu` → `ci/Dockerfile.debian` (x86_64, generic ISA for VMs)
+- `--platform=orangepi3b` → `ci/Dockerfile.debian-arm64` (aarch64 cross-build, Cortex-A55)
 
-1. DPDK, which is a submodule in `3rdparty/dpdk`.
+Per-platform build/install directories (e.g. `build-orangepi3b/`, `install-orangepi3b/`) let multiple platforms coexist on the same host without stomping each other.
 
-2. libiec61850, which is a submodule in `3rdparty/libiec61850`.
+The script builds:
 
-3. `bus_processor`, `bus_generator`, `unit_tests` and tools.
+1. DPDK, submodule in `3rdparty/dpdk`. Statically linked. Built `release` (no DWARF).
+
+2. libiec61850, submodule in `3rdparty/libiec61850`.
+
+3. `bus_processor`, `bus_generator`, `unit_tests` and tools. Built `RelWithDebInfo` (`-O3 -g -DNDEBUG`) — DWARF stays in the binary, no split-debug step.
 
 ## How to Run
 
-[Running with Qemu](docs/Running_with_QEMU.md)
+Each platform has its own deploy directory under `deploy/<platform>/` containing `setup_platform.sh`, `run_generator.sh`, `run_processor.sh`, and a platform README that covers the host setup (hugepages, NIC binding, RT tuning, etc.). The app command-line below is the same on every platform; only the wrapper scripts differ.
 
-There are special scripts(qemu): `run_generator.sh` and `run_processor.sh`.
+- QEMU walkthrough: [docs/Running_with_QEMU.md](docs/Running_with_QEMU.md)
+- Per-platform notes: [deploy/qemu/README.md](deploy/qemu/README.md), [deploy/qotom/README.md](deploy/qotom/README.md), [deploy/orangepi3b/README.md](deploy/orangepi3b/README.md)
 
 For example, generating packets:
 
-1. `./run_generator.sh --sv80 500`  
+1. `./run_generator.sh --sv80 500`
    Generate 500 SV protocol according to 9.2LE 80 points.
 
-2. `./run_generator.sh --sv256 500`  
+2. `./run_generator.sh --sv256 500`
    Generate 500 SV protocol according to 9.2LE 256 points.
 
-3. `./run_generator.sh --goose 100,1000`  
+3. `./run_generator.sh --goose 100,1000`
    Generate 100 unique GOOSE messages with 1000 changes per second.
 
 Processing packets:
 
-1. `./run_processor.sh --sv80 100`  
+1. `./run_processor.sh --sv80 100`
    Expect 100 SV streams from a generator.
 
-2. `./run_processor.sh --sv256 100`  
+2. `./run_processor.sh --sv256 100`
    Expect 100 SV streams from a generator.
 
-3. `./run_processor.sh --goose 100`  
+3. `./run_processor.sh --goose 100`
    Expect 100 GOOSE messages from a generator.
 
 ## Performance metrics
