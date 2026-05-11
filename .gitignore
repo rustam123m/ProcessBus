@@ -9,6 +9,7 @@ install/
 src/playground/
 docs/project/
 docs/r-messages/
+docs/investigation/
 tmp/
 
 *.img
