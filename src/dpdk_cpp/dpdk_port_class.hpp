@@ -46,6 +46,15 @@ namespace DPDK
                 throw std::runtime_error("Can't start port: " + std::to_string(m_portID));
             }
             m_isStarted = true;
+#ifdef PLATFORM_ORANGEPI3B
+            // Disable Ethernet flow control: PAUSE frames otherwise burn ~30% of
+            // the 2.5G link at small-packet rates (GOOSE/SV ~200 B).
+            struct rte_eth_fc_conf fc;
+            if (rte_eth_dev_flow_ctrl_get(m_portID, &fc) == 0) {
+                fc.mode = RTE_ETH_FC_NONE;
+                rte_eth_dev_flow_ctrl_set(m_portID, &fc);
+            }
+#endif
         }
         void Stop() {
             if (m_isStarted) {
