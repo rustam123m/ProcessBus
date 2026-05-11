@@ -164,13 +164,13 @@ function build_apps()
         -S ./
         -B "$BUILD_DIR"
         -DPLATFORM="$PLATFORM"
-        -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo
         -DBUILD_TESTS=ON
         -DBUILD_SAMPLES=OFF
         -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR"
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-        -DCMAKE_CXX_FLAGS_RELEASE="-O3"
-        -DCMAKE_C_FLAGS_RELEASE="-O3"
+        -DCMAKE_CXX_FLAGS_RELWITHDEBINFO="-O3 -g -DNDEBUG"
+        -DCMAKE_C_FLAGS_RELWITHDEBINFO="-O3 -g -DNDEBUG"
     )
     if [[ -n "$CMAKE_TOOLCHAIN" ]]; then
         cmake_args+=(-DCMAKE_TOOLCHAIN_FILE="$CMAKE_TOOLCHAIN")
