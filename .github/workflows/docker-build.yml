@@ -39,7 +39,7 @@ jobs:
           docker run --rm \
             -v ${{ github.workspace }}:/workspace \
             -w /workspace \
-            --user $(id -u):$(id -g) \
+            --user 0:0 \
             --cap-add=NET_RAW \
             pbus-build ./${{ matrix.build_dir }}/src/tests/unit_tests
 
