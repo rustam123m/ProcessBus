@@ -7,9 +7,19 @@
 #include <rte_prefetch.h>
 
 constexpr unsigned  RX_BURST_SIZE = 32;
+constexpr unsigned  PREFETCH_DIST = 4;
 
 namespace PBus
 {
+    // Prefetch 3 × 64B cache lines = 192B — covers SV80 and typical GOOSE PDUs.
+    static inline void prefetch_payload(rte_mbuf *m)
+    {
+        const char *p = rte_pktmbuf_mtod(m, const char *);
+        rte_prefetch0(p);
+        rte_prefetch0(p + 64);
+        rte_prefetch0(p + 128);
+    }
+
     /*
         Frame processing:
         {mbuf} -> RouterStage -> GooseStage -> SampledValuesStage -> IPStage
@@ -33,8 +43,13 @@ namespace PBus
         static void ApplyTo(TMatrix& matrix) {
             typename TMatrix::Frame &frame = matrix.stages[TFrameIdx];
 
+            for (unsigned i=0;i<frame.num && i<PREFETCH_DIST;++i) {
+                prefetch_payload(frame.buf[i]);
+            }
             for (unsigned i=0;i<frame.num;++i) {
-                /* rte_prefetch0(frame.buf[i]); */
+                if (i + PREFETCH_DIST < frame.num) {
+                    prefetch_payload(frame.buf[i+PREFETCH_DIST]);
+                }
                 const uint8_t *packet = rte_pktmbuf_mtod(frame.buf[i], const uint8_t *);
 
                 unsigned appid = 0;
@@ -67,10 +82,16 @@ namespace PBus
             typename TMatrix::Frame &frame = matrix.stages[TFrameIdx];
 
             RX_Application &app = *matrix.app;
+            for (unsigned i=0;i<frame.num && i<PREFETCH_DIST;++i) {
+                prefetch_payload(frame.buf[i]);
+            }
             for (unsigned i=0;i<frame.num;++i) {
+                if (i + PREFETCH_DIST < frame.num) {
+                    prefetch_payload(frame.buf[i+PREFETCH_DIST]);
+                }
                 const uint8_t *packet = rte_pktmbuf_mtod(frame.buf[i], const uint8_t *);
                 const unsigned size = rte_pktmbuf_pkt_len(frame.buf[i]);
-                
+
                 GoosePassport pass;
                 GooseState state;
                 int retval = ProcessBusParser::parse_goose_packet(packet, size, pass, state);
@@ -101,7 +122,13 @@ namespace PBus
             typename TMatrix::Frame &frame = matrix.stages[TFrameIdx];
 
             RX_Application &app = *matrix.app;
+            for (unsigned i=0;i<frame.num && i<PREFETCH_DIST;++i) {
+                prefetch_payload(frame.buf[i]);
+            }
             for (unsigned i=0;i<frame.num;++i) {
+                if (i + PREFETCH_DIST < frame.num) {
+                    prefetch_payload(frame.buf[i+PREFETCH_DIST]);
+                }
                 const uint8_t *packet = rte_pktmbuf_mtod(frame.buf[i], const uint8_t *);
                 const unsigned size = rte_pktmbuf_pkt_len(frame.buf[i]);
 

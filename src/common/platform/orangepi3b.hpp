@@ -1,13 +1,12 @@
 #pragma once
 
 // Orange Pi 3B (Rockchip RK3566 / Cortex-A55, 1.9 GB RAM).
-// Sized conservatively for 512 MB of 2 MB hugepages — leaves headroom
-// on a board that also runs a kernel + Armbian userland.
+// Sized for 32 × 32 MiB hugepages (1 GiB) — fits A55's 32-entry dTLB exactly.
 
 namespace Platform
 {
-    // Mempool sizes
-    constexpr unsigned PROCESSOR_MBUF_NUM = 512 * 1024;
+    // 400K mbufs × ~2304 B ≈ 922 MiB ≈ 29 × 32 MiB pages.
+    constexpr unsigned PROCESSOR_MBUF_NUM = 400 * 1024;
     constexpr unsigned GENERATOR_MBUF_NUM = 128 * 1024;
     constexpr unsigned MEMPOOL_CACHE_SIZE = 64;
 

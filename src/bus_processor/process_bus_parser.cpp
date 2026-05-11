@@ -4,23 +4,37 @@
 
 namespace
 {
-    inline int decode_asn1_len(const uint8_t* buffer, size_t *pos)
+    inline int decode_asn1_len(const uint8_t* buffer, uint32_t *pos)
     {
-        int lenByte = buffer[*pos];
-        ++(*pos);
+        uint32_t p = *pos;
+        uint8_t lenByte = buffer[p++];
+        int length;
 
-        if (lenByte & 0x80) {
-            int lenBytes = lenByte & 0x7F, length = 0;
-            for (int i=0;i<lenBytes;++i) {
-                length = (length << 8) | buffer[*pos];
-                ++(*pos);
+        if (!(lenByte & 0x80)) {
+            length = lenByte;
+        } else {
+            switch (lenByte & 0x7F) {
+            case 1:
+                length = buffer[p];
+                p += 1;
+                break;
+            case 2:
+                length = (buffer[p] << 8) | buffer[p + 1];
+                p += 2;
+                break;
+            default:
+                length = 0;
+                for (int n = lenByte & 0x7F; n > 0; --n) {
+                    length = (length << 8) | buffer[p++];
+                }
+                break;
             }
-            return length;
         }
-        return lenByte;
+        *pos = p;
+        return length;
     }
 
-    inline uint32_t decode_asn1_number(const uint8_t* buffer, size_t size)
+    inline uint32_t decode_asn1_number(const uint8_t* buffer, uint32_t size)
     {
         switch (size) {
         case 1:
@@ -64,7 +78,7 @@ int ProcessBusParser::parse_goose_packet(const uint8_t *buffer, int size,
 
     passport.dmac = MAC(buffer);
 
-    size_t pos = 14;
+    uint32_t pos = 14;
     if (buffer[12] == 0x81 && buffer[13] == 0x00 &&
         buffer[16] == 0x88 && buffer[17] == 0xB8) {
         // VLAN -> GOOSE
@@ -134,7 +148,7 @@ int ProcessBusParser::parse_goose_packet(const uint8_t *buffer, int size,
             break;
         case 0x30: // SEQUENCE
         case 0x31: // SET
-            for (size_t end = pos + itemSize; pos < end;) {
+            for (uint32_t end = pos + itemSize; pos < end;) {
                 uint8_t innerTag = buffer[pos++];
                 pos += decode_asn1_len(buffer, &pos);
             }
@@ -162,7 +176,7 @@ int ProcessBusParser::parse_sv_packet(const uint8_t *buffer, int size,
 
     passport.dmac = MAC(buffer);
 
-    size_t pos = 14;
+    uint32_t pos = 14;
     if (buffer[12] == 0x81 && buffer[13] == 0x00 &&
         buffer[16] == 0x88 && buffer[17] == 0xBA) {
         // VLAN -> SV
