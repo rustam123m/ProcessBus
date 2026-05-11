@@ -55,7 +55,7 @@ if [ -w "$THP_DIR/defrag" ];  then echo never > "$THP_DIR/defrag";  fi
 sysctl -wq kernel.sched_rt_runtime_us=-1
 
 # --- Hugepages: 32 MiB pages — arm64 PMD-contiguous, single A55 dTLB entry per page.
-#     1 GiB attempts failed at boot (CMA fragments low-address region). ---
+#     1 GiB attempts fail at boot on RK3566 (no 1 GiB-aligned contiguous block). ---
 echo "$HUGEPAGES_32M" > /sys/kernel/mm/hugepages/hugepages-32768kB/nr_hugepages
 HP_OK=$(cat /sys/kernel/mm/hugepages/hugepages-32768kB/nr_hugepages)
 if [ "$HP_OK" -lt "$HUGEPAGES_32M" ]; then
@@ -63,8 +63,6 @@ if [ "$HP_OK" -lt "$HUGEPAGES_32M" ]; then
     echo "       Free RAM = $(awk '/^MemFree:/ {print $2}' /proc/meminfo) kB" >&2
     exit 1
 fi
-# Remount /dev/hugepages with pagesize=32M. systemd auto-mounts it with the
-# kernel's default_hugepagesz, which may be different.
 mountpoint -q /dev/hugepages && umount /dev/hugepages
 mkdir -p /dev/hugepages
 mount -t hugetlbfs -o pagesize=32M none /dev/hugepages

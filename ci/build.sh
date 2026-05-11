@@ -7,9 +7,7 @@ set -o pipefail # Don't let a successful tail/grep mask an upstream failure
 SCRIPT_PATH="$(dirname "$(realpath "$0")")"
 REPO_DIR="$SCRIPT_PATH/../"
 DPDK_DIR="$REPO_DIR/3rdparty/dpdk/"
-# DPDK_BUILD / DPDK_INSTALL / DPDK_PKGCONFIG are per-platform — set in
-# configure_platform() so x86 and arm64 builds can coexist on the same
-# host without stomping each other's build/install dirs.
+# DPDK_BUILD / INSTALL / PKGCONFIG are per-platform — set in configure_platform().
 
 PLATFORM=atom
 OPT_UPDATE_SRC=1
@@ -76,9 +74,7 @@ function prepare_sources()
     tar xzf "$MBEDTLS_DIR/mbedtls.tar.gz" -C "$MBEDTLS_DIR"
     rm "$MBEDTLS_DIR/mbedtls.tar.gz"
 
-    # Apply our patches over pristine submodule sources. Patches are
-    # grouped per submodule under ci/patches/<submodule-name>/ so each
-    # set is applied to the matching source tree.
+    # Patches grouped per submodule under ci/patches/<name>/.
     apply_patches "$REPO_DIR/3rdparty/libiec61850" "$SCRIPT_PATH/patches/libiec61850"
     apply_patches "$REPO_DIR/3rdparty/dpdk"        "$SCRIPT_PATH/patches/dpdk"
 }
@@ -119,8 +115,7 @@ function build_dpdk()
     else
         meson_args+=(-Dmachine="$TARGET_PROCESSOR")
     fi
-    # OrangePi 3B's RK3566 PCIe is not cache-coherent — patched igc PMD
-    # emits dc cvac/civac + dsb sy in fast paths. No-op on other SoCs.
+    # RK3566 PCIe is not cache-coherent; patched igc PMD emits dc cvac/civac.
     if [[ "$PLATFORM" == "orangepi3b" ]]; then
         meson_args+=(-Dnoncoherent_dma=true)
     fi

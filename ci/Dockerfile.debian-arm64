@@ -14,16 +14,12 @@ RUN apt-get update && apt-get -y --no-install-recommends install \
     gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Cross pkg-config wrapper: routes pkg-config to the arm64 sysroot.
-# Trixie has no per-arch pkg-config binary — verified 2026-05-07,
-# `apt install pkg-config-aarch64-linux-gnu` fails with "unable to
-# locate". So we keep the wrapper.
+# Cross pkg-config wrapper (Trixie has no per-arch pkg-config binary).
 RUN printf '#!/bin/sh\nexport PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/aarch64-linux-gnu/lib/pkgconfig\nexport PKG_CONFIG_SYSROOT_DIR=\nexec pkg-config "$@"\n' \
         > /usr/local/bin/aarch64-linux-gnu-pkg-config \
     && chmod +x /usr/local/bin/aarch64-linux-gnu-pkg-config
 
-# Cross sysroot dev libs (:arm64). libnuma is the only hard DPDK dep;
-# the rest are for optional PMDs (af_xdp, pcap) we may enable later.
+# Cross sysroot dev libs (:arm64). libnuma is the only hard DPDK dep.
 RUN apt-get update && apt-get -y --no-install-recommends install \
     libnuma-dev:arm64 libelf-dev:arm64 \
     libpcap-dev:arm64 libbpf-dev:arm64 libxdp-dev:arm64 \
