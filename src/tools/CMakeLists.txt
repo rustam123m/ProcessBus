@@ -13,4 +13,5 @@ endfunction()
 build_tool_app(rtspin)
 build_tool_app(delay_meter)
 build_tool_app(pkt_redirect)
+build_tool_app(rx_counter)
 
