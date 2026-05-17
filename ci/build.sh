@@ -40,8 +40,8 @@ configure_platform() {
             DPDK_DRIVERS="net_igc,net_af_packet,net_tap,net_ring"
             BUILD_DIR="$REPO_DIR/build-orangepi3b/"
             INSTALL_DIR="$REPO_DIR/install-orangepi3b/"
-            DPDK_CROSS_FILE="$SCRIPT_PATH/dpdk-orangepi3b.cross"
-            CMAKE_TOOLCHAIN="$SCRIPT_PATH/cmake-orangepi3b.toolchain"
+            DPDK_CROSS_FILE="$REPO_DIR/cmake/platforms/orangepi3b-dpdk.cross"
+            CMAKE_TOOLCHAIN="$REPO_DIR/cmake/platforms/orangepi3b-toolchain.cmake"
             DOCKERFILE="$SCRIPT_PATH/Dockerfile.debian-arm64"
             BUILDER_IMAGE="pbus_builder_arm64"
             ;;

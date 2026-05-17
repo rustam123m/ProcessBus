@@ -23,6 +23,7 @@ target_include_directories(${TARGET_NAME}
 
 setup_dpdk(${TARGET_NAME})
 setup_libiec61850(${TARGET_NAME})
+hotpath_disasm(${TARGET_NAME})
 
 install(TARGETS ${TARGET_NAME} DESTINATION bin)
 

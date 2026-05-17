@@ -4,6 +4,10 @@ project(pbus LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD          20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+include(${CMAKE_SOURCE_DIR}/cmake/hotpath.cmake)
+
 # Platform selection (default: atom)
 if (NOT DEFINED PLATFORM)
     set(PLATFORM atom)

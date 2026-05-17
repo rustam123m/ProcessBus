@@ -6,8 +6,7 @@ set(CMAKE_SYSTEM_PROCESSOR aarch64)
 set(CMAKE_C_COMPILER   aarch64-linux-gnu-gcc)
 set(CMAKE_CXX_COMPILER aarch64-linux-gnu-g++)
 
-set(CMAKE_C_FLAGS_INIT   "-mcpu=cortex-a55")
-set(CMAKE_CXX_FLAGS_INIT "-mcpu=cortex-a55")
+# -mcpu=cortex-a55 comes from cmake/platforms/orangepi3b.cmake (TARGET_ARCH_FLAGS).
 
 set(CMAKE_FIND_ROOT_PATH /usr/aarch64-linux-gnu)
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)

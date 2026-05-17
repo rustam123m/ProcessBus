@@ -14,6 +14,7 @@ add_executable(${TARGET_NAME}
 )
 
 setup_dpdk(${TARGET_NAME})
+hotpath_disasm(${TARGET_NAME})
 
 install(TARGETS ${TARGET_NAME} DESTINATION bin)
 
