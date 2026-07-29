@@ -1,5 +1,6 @@
 #include "sv_traffic_gen.hpp"
 
+#include "iec61850_common.h"
 #include "mms_value.h"
 #include "sv_publisher.h"
 
@@ -8,6 +9,20 @@
 
 #define PLACEHOLDER             "1234"
 const char *SVID_PATTERN = "SVID" PLACEHOLDER;
+
+namespace
+{
+    constexpr int SV_CHANNELS = 8;
+
+    // Give every sample value and quality flag a defined value.
+    void init_asdu_data(SVPublisher_ASDU asdu, const int vIndex[], const int qIndex[])
+    {
+        for (int i=0;i<SV_CHANNELS;++i) {
+            SVPublisher_ASDU_setINT32(asdu, vIndex[i], 100 + i);
+            SVPublisher_ASDU_setQuality(asdu, qIndex[i], QUALITY_VALIDITY_GOOD);
+        }
+    }
+}
 
 SVTrafficGen::SVTrafficGen(unsigned num, SV_TYPE type) : m_ieds(num)
 {
@@ -52,12 +67,16 @@ void SVTrafficGen::MakeSkeletonSV80()
     if (sv80) {
         SVPublisher_ASDU asdu = SVPublisher_addASDU(sv80, SVID_PATTERN, nullptr, 1);
 
-        int vIndex[8] = { 0 }, qIndex[8] = { 0 };
-        for (int i=0;i<8;++i) {
+        int vIndex[SV_CHANNELS] = { 0 }, qIndex[SV_CHANNELS] = { 0 };
+        for (int i=0;i<SV_CHANNELS;++i) {
             vIndex[i] = SVPublisher_ASDU_addINT32(asdu);
             qIndex[i] = SVPublisher_ASDU_addQuality(asdu);
         }
         SVPublisher_setupComplete(sv80);
+
+        // Must run after setupComplete(): that is where the ASDU data buffer is
+        // bound (sv_publisher.c:460), and the setters write straight into it.
+        init_asdu_data(asdu, vIndex, qIndex);
 
         m_appidOffset = SVPublisher_getAPPID_Offset(sv80);
         m_asduOffs[0][SV_SVID_OFFSET] = SVPublisher_ASDU_getSVID_Offset(sv80, asdu);
@@ -89,14 +108,21 @@ void SVTrafficGen::MakeSkeletonSV256()
     SVPublisher sv256 = SVPublisher_create(&ethParams, "lo");
     if (sv256) {
         SVPublisher_ASDU asdu[MAX_SV_ASDU_NUM]; // 9.2LE 256 points
+        int vIndex[MAX_SV_ASDU_NUM][SV_CHANNELS] = { 0 },
+            qIndex[MAX_SV_ASDU_NUM][SV_CHANNELS] = { 0 };
         for (int i=0;i<MAX_SV_ASDU_NUM;++i) {
             asdu[i] = SVPublisher_addASDU(sv256, SVID_PATTERN, nullptr, 1);
-            for (int j=0;j<8;++j) {
-                SVPublisher_ASDU_addINT32(asdu[i]);
-                SVPublisher_ASDU_addQuality(asdu[i]);
+            for (int j=0;j<SV_CHANNELS;++j) {
+                vIndex[i][j] = SVPublisher_ASDU_addINT32(asdu[i]);
+                qIndex[i][j] = SVPublisher_ASDU_addQuality(asdu[i]);
             }
         }
         SVPublisher_setupComplete(sv256);
+
+        // See the note in MakeSkeletonSV80(): only valid after setupComplete().
+        for (int i=0;i<MAX_SV_ASDU_NUM;++i) {
+            init_asdu_data(asdu[i], vIndex[i], qIndex[i]);
+        }
 
         m_appidOffset = SVPublisher_getAPPID_Offset(sv256);
         for (int i=0;i<MAX_SV_ASDU_NUM;i++) {
