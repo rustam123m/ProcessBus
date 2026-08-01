@@ -2,6 +2,8 @@
 
 #include <gtest/gtest.h>
 
+#include <vector>
+
 // --- GOOSE error paths ---
 
 TEST(GooseParserErrors, PacketTooSmall)
@@ -153,4 +155,150 @@ TEST(ProtoType, NonVLAN_SV)
     unsigned appid = 0;
     ASSERT_EQ(ProcessBusParser::get_proto_type(packet, &appid), BUS_PROTO_SV);
     ASSERT_EQ(appid, 0x0042);
+}
+
+// --- allData walk ---
+
+namespace
+{
+    size_t len_size(size_t len)
+    {
+        if (len < 0x80) {
+            return 1;
+        }
+        return (len <= 0xFF) ? 2 : 3;
+    }
+
+    void put_len(std::vector<uint8_t> &out, size_t len)
+    {
+        if (len < 0x80) {
+            out.push_back(uint8_t(len));
+        } else if (len <= 0xFF) {
+            out.push_back(0x81);
+            out.push_back(uint8_t(len));
+        } else {
+            out.push_back(0x82);
+            out.push_back(uint8_t(len >> 8));
+            out.push_back(uint8_t(len));
+        }
+    }
+
+    /*
+     * Minimal non-VLAN GOOSE. Entries are appended verbatim so a test can build
+     * a dataset that disagrees with numDatSetEntries. The PDU is padded via the
+     * GoID to fill the frame exactly: parse_goose_packet walks to `size`, so
+     * trailing bytes would be read as further tags.
+     */
+    std::vector<uint8_t> make_goose(uint8_t declaredEntries,
+                                    const std::vector<uint8_t> &entries)
+    {
+        std::vector<uint8_t> goid(4, 'G');
+        for (;;) {
+            const size_t allDataLen = 1 + len_size(entries.size()) + entries.size();
+            const size_t goidLen    = 1 + len_size(goid.size()) + goid.size();
+            const size_t pduLen     = 6 + 6 + goidLen + 3 + 3 + 3 + allDataLen;
+            const size_t total      = 22 + 1 + len_size(pduLen) + pduLen;
+
+            if (total >= 64) {
+                std::vector<uint8_t> p = {
+                    0x01,0x0C,0xCD,0x04,0x00,0x00, 0xF0,0xF1,0xF2,0xF3,0xF4,0xF5,
+                    0x88,0xB8, 0x00,0x01, 0x00,0x00, 0x00,0x00, 0x00,0x00,
+                };
+                p.push_back(0x61);
+                put_len(p, pduLen);
+                p.insert(p.end(), {0x80,0x04,'T','E','S','T',
+                                   0x82,0x04,'T','E','S','T'});
+                p.push_back(0x83);
+                put_len(p, goid.size());
+                p.insert(p.end(), goid.begin(), goid.end());
+                p.insert(p.end(), {0x85,0x01,0x01, 0x86,0x01,0x00,
+                                   0x8A,0x01, declaredEntries});
+                p.push_back(0xAB);
+                put_len(p, entries.size());
+                p.insert(p.end(), entries.begin(), entries.end());
+                return p;
+            }
+            goid.push_back('G');
+        }
+    }
+
+    int parse(const std::vector<uint8_t> &p)
+    {
+        GoosePassport pass;
+        GooseState state;
+        return ProcessBusParser::parse_goose_packet(p.data(), int(p.size()), pass, state);
+    }
+}
+
+TEST(GooseDataSet, CountMatchesIsAccepted)
+{
+    ASSERT_EQ(parse(make_goose(3, {0x83,0x01,0x00, 0x83,0x01,0x01, 0x83,0x01,0x00})), 0);
+}
+
+TEST(GooseDataSet, DeclaredMoreThanPresent)
+{
+    ASSERT_EQ(parse(make_goose(4, {0x83,0x01,0x00, 0x83,0x01,0x01})), -102);
+}
+
+TEST(GooseDataSet, DeclaredFewerThanPresent)
+{
+    ASSERT_EQ(parse(make_goose(1, {0x83,0x01,0x00, 0x83,0x01,0x01})), -102);
+}
+
+TEST(GooseDataSet, TruncatedEntryIsRejected)
+{
+    // Last entry claims one value byte that lies outside allData.
+    ASSERT_EQ(parse(make_goose(2, {0x83,0x01,0x00, 0x83,0x01})), -101);
+}
+
+TEST(GooseDataSet, EntryLengthOverrunsDataSet)
+{
+    ASSERT_EQ(parse(make_goose(1, {0x83,0x7F,0x00})), -101);
+}
+
+TEST(GooseDataSet, TagWithoutLengthByte)
+{
+    ASSERT_EQ(parse(make_goose(1, {0x83})), -101);
+}
+
+TEST(GooseDataSet, LongFormEntryLength)
+{
+    // 0x81 0x80 = long form, 128 value bytes; entry is 131 bytes total.
+    std::vector<uint8_t> e = {0x84, 0x81, 0x80};
+    e.insert(e.end(), 128, 0xAA);
+    ASSERT_EQ(parse(make_goose(1, e)), 0);
+}
+
+TEST(GooseDataSet, FoundEntriesReportsWhatWasWalked)
+{
+    const auto p = make_goose(3, {0x83,0x01,0x00, 0x83,0x01,0x01, 0x83,0x01,0x00});
+    GoosePassport pass;
+    GooseState state;
+
+    ASSERT_EQ(ProcessBusParser::parse_goose_packet(p.data(), int(p.size()), pass, state), 0);
+    ASSERT_EQ(pass.num, 3u);
+    ASSERT_EQ(pass.foundEntries, 3u);
+}
+
+TEST(GooseDataSet, FoundEntriesIsSetOnMismatchToo)
+{
+    const auto p = make_goose(4, {0x83,0x01,0x00, 0x83,0x01,0x01});
+    GoosePassport pass;
+    GooseState state;
+
+    ASSERT_EQ(ProcessBusParser::parse_goose_packet(p.data(), int(p.size()), pass, state), -102);
+    ASSERT_EQ(pass.num, 4u)          << "declared value is kept";
+    ASSERT_EQ(pass.foundEntries, 2u) << "counted value tells which side is wrong";
+}
+
+TEST(GooseDataSet, FoundEntriesIsNotPartOfIdentity)
+{
+    // Registered sources never set it; comparing it would break every lookup.
+    GoosePassport a, b;
+    a.appid = b.appid = 1;
+    a.num = b.num = 4;
+    a.foundEntries = 4;
+    b.foundEntries = 0;
+
+    ASSERT_TRUE(a == b);
 }

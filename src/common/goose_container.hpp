@@ -15,11 +15,13 @@ struct GoosePassport
     MAC                 dmac;
     uint16_t            appid = 0;
     uint16_t            num = 0;
+    uint32_t            foundEntries = 0;
     uint32_t            crev = 0;
 
     std::string_view    goid;
     std::string_view    dataset;
     std::string_view    gocbref;
+    uint16_t            allDataOffset = 0;
 
     bool operator==(const GoosePassport &r) const {
         return (dmac == r.dmac)
@@ -38,6 +40,7 @@ struct GoosePassport
             << "\tDATASET = " << obj.dataset << "\n"
             << "\tGOCB = " << obj.gocbref << "\n"
             << "\tNumEntries = " << obj.num << "\n"
+            << "\tFoundEntries = " << obj.foundEntries << "\n"
             << "\tCRev = " << obj.crev;
         return out;
     }

@@ -55,6 +55,40 @@ namespace
         return 0;
     }
 
+    // Returns number of entries on this level, -1 if malformed
+    int parse_alldata(const uint8_t* buffer, uint32_t pos, uint32_t end, int depth)
+    {
+        // Nesting is bounded so a crafted frame can't run the stack out.
+        constexpr int MAX_DATA_DEPTH = 8;
+
+        if (depth > MAX_DATA_DEPTH) {
+            return -1;
+        }
+
+        int num = 0;
+        while (pos < end) {
+            uint8_t tag = buffer[pos++];
+            if (pos >= end) {
+                return -1;
+            }
+
+            int itemSize = decode_asn1_len(buffer, &pos);
+            if (itemSize < 0 || pos + (uint32_t)itemSize > end) {
+                return -1;
+            }
+
+            // 0xA1 array, 0xA2 structure
+            if ((tag == 0xA1 || tag == 0xA2)
+                && parse_alldata(buffer, pos, pos + itemSize, depth + 1) < 0) {
+                return -1;
+            }
+
+            pos += itemSize;
+            ++num;
+        }
+        return num;
+    }
+
     inline std::string_view make_stringview(const uint8_t* data, int length)
     {
         return {
@@ -145,7 +179,15 @@ int ProcessBusParser::parse_goose_packet(const uint8_t *buffer, int size,
             passport.num = decode_asn1_number(buffer + pos, itemSize);
             break;
         case 0xab: /* allData */
+        {
+            const int num = parse_alldata(buffer, pos, pos + itemSize, 0);
+            if (num < 0) {
+                return -101;
+            }
+            passport.allDataOffset = pos;
+            passport.foundEntries = num;
             break;
+        }
         case 0x30: // SEQUENCE
         case 0x31: // SET
             for (uint32_t end = pos + itemSize; pos < end;) {
@@ -162,6 +204,9 @@ int ProcessBusParser::parse_goose_packet(const uint8_t *buffer, int size,
         }
 
         pos += itemSize;
+    }
+    if (passport.foundEntries != passport.num) {
+        return -102;
     }
     return (found_gocbref && found_dataset && found_goid) ? 0 : -100;
 }

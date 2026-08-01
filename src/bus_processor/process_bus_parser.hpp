@@ -54,8 +54,10 @@ public:
         return NON_BUS_PROTO;
     }
 
-    /**
-     * @function parse_goose_packet
+    /*
+     * Returns 0 on success, -100 when a mandatory field is missing,
+     *         -101 for a malformed allData entry, -102 when the number of
+     *         entries found differs from numDatSetEntries.
      */
     static int
     parse_goose_packet(const uint8_t *buffer, int size,

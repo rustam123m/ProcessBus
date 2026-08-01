@@ -210,3 +210,45 @@ TEST(GooseContainer, BasicUsage)
     ASSERT_NE(itG2->second->GetPassport(), g1->GetPassport());
     ASSERT_NE(passport, g2->GetPassport());
 }
+
+/*
+ * Regression guard for the allData walk. Both mutations are invisible to a
+ * parser that skips the dataset, so these fail if the walk is ever removed.
+ */
+TEST(GooseFastParser, DataSetMutationsAreDetected)
+{
+    uint8_t packet[MAX_GOOSE_PACKET_SIZE] = { 0 };
+    GooseMakerByLib goose;
+    size_t size = goose.MakePacket(packet);
+
+    GoosePassport pass;
+    GooseState state;
+    ASSERT_EQ(ProcessBusParser::parse_goose_packet(packet, size, pass, state), 0);
+    ASSERT_EQ(pass.num, goose.GetNumEntries());
+
+    // numDatSetEntries is "8A 01 <n>", immediately followed by allData "AB <len>".
+    size_t at = 0;
+    for (size_t i=0;i+3<size;++i) {
+        if (packet[i] == 0x8A && packet[i+1] == 0x01
+            && packet[i+2] == goose.GetNumEntries() && packet[i+3] == 0xAB) {
+            at = i;
+            break;
+        }
+    }
+    ASSERT_NE(at, 0u) << "numDatSetEntries/allData not found";
+
+    // 1. Declared count no longer matches what the dataset holds.
+    uint8_t saved = packet[at + 2];
+    packet[at + 2] = saved + 1;
+    ASSERT_EQ(ProcessBusParser::parse_goose_packet(packet, size, pass, state), -102);
+    packet[at + 2] = saved;
+
+    // 2. First entry claims a length that runs past the end of allData.
+    uint8_t &firstLen = packet[at + 5 + 1];
+    saved = firstLen;
+    firstLen = 0x7F;
+    ASSERT_EQ(ProcessBusParser::parse_goose_packet(packet, size, pass, state), -101);
+    firstLen = saved;
+
+    ASSERT_EQ(ProcessBusParser::parse_goose_packet(packet, size, pass, state), 0);
+}

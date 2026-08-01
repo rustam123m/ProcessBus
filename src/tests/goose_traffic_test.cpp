@@ -158,7 +158,7 @@ TEST(GooseFastParser, Timestamp4Bytes)
         0x85, 0x01, 0x01,                                   // stNum = 1
         0x86, 0x01, 0x00,                                   // sqNum = 0
         0x8A, 0x01, 0x01,                                   // numDatSetEntries = 1
-        0xAB, 0x05, 0x83, 0x01, 0x00, 0x83, 0x01,          // allData (pad to 64)
+        0xAB, 0x05, 0x85, 0x03, 0x00, 0x00, 0x00,          // allData: 1 entry (pad to 64)
     };
     static_assert(sizeof(packet) == 64);
 
