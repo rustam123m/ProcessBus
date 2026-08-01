@@ -4,11 +4,11 @@
     {
       "name": "atom",
       "displayName": "Intel Atom (Qotom production)",
-      "binaryDir": "${sourceDir}/build",
+      "binaryDir": "${sourceDir}/build-atom",
       "cacheVariables": {
         "PLATFORM": "atom",
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install-atom",
         "BUILD_TESTS": "ON"
       }
     },
@@ -24,14 +24,15 @@
       }
     },
     {
-      "name": "arm64",
-      "displayName": "ARM64 RockChip (placeholder)",
-      "binaryDir": "${sourceDir}/build-arm64",
+      "name": "orangepi3b",
+      "displayName": "OrangePi 3B (RockChip RK3566, aarch64 cross)",
+      "binaryDir": "${sourceDir}/build-orangepi3b",
       "cacheVariables": {
-        "PLATFORM": "arm64",
+        "PLATFORM": "orangepi3b",
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install-arm64",
-        "BUILD_TESTS": "ON"
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/install-orangepi3b",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/platforms/orangepi3b-toolchain.cmake",
+        "BUILD_TESTS": "OFF"
       }
     }
   ]

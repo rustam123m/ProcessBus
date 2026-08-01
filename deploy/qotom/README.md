@@ -111,7 +111,7 @@ Single entry point: `deploy/qotom/deploy.sh`.
 
 What it does in order:
 1. (Optional) `ci/build.sh --rebuild`.
-2. Bundle `install/*` + common scripts + this directory's scripts and
+2. Bundle `install-atom/*` + common scripts + this directory's scripts and
    `scenarios.conf` into `deploy/qotom/pbus/`, scp to
    `$USER@$HOST:/home/jarvis/pbus/`.
 3. Check the sentinel `/var/run/pbus_rt` on the target. If absent,

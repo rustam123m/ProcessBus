@@ -10,7 +10,7 @@ set -e
 
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 REPO_DIR="$SCRIPT_DIR/../.."
-INSTALL_DIR="$REPO_DIR/install"
+INSTALL_DIR="$REPO_DIR/install-atom"
 COMMON_DIR="$REPO_DIR/deploy/common"
 RESULTS_DIR="$SCRIPT_DIR/results"
 SCENARIOS_FILE="$SCRIPT_DIR/scenarios.conf"

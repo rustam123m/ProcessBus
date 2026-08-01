@@ -37,13 +37,32 @@ This repository contains a proof-of-concept that combines five key ideas:
 
 ## How to Build Applications
 
-Builds run inside a Debian container so the host's toolchain does not matter. The script `ci/build.sh` selects the right container and toolchain per platform via `--platform=`:
+Builds run inside a Debian container so the host's toolchain does not matter. Run `ci/build.sh`; `--platform=` selects the container and toolchain:
 
 - `--platform=atom` → `ci/Dockerfile.debian` (x86_64, native)
 - `--platform=qemu` → `ci/Dockerfile.debian` (x86_64, generic ISA for VMs)
 - `--platform=orangepi3b` → `ci/Dockerfile.debian-arm64` (aarch64 cross-build, Cortex-A55)
 
-Per-platform build/install directories (e.g. `build-orangepi3b/`, `install-orangepi3b/`) let multiple platforms coexist on the same host without stomping each other.
+```
+ci/build.sh --platform=atom --setup     # build the builder image (once)
+ci/build.sh --platform=atom             # full build
+ci/build.sh --platform=atom --rebuild   # recompile only, no reconfigure
+ci/build.sh --platform=atom --shell     # interactive shell in the builder
+```
+
+The build is split in two, which matters if you invoke it any other way:
+
+| Script | Runs | Responsibility |
+|---|---|---|
+| `ci/build.sh` | on the host | picks and starts the builder container, then calls the one below |
+| `ci/build_internal.sh` | inside the container | sources, DPDK, CMake, install |
+| `ci/platforms.sh` | sourced by both | the per-platform table, so the two cannot disagree |
+
+Anything already inside a container calls `ci/build_internal.sh` directly — that is what `.github/workflows/docker-build.yml` does, since GitHub Actions supplies its own container and going through `ci/build.sh` would nest a second one.
+
+Per-platform build/install directories (`build-atom/`, `build-qemu/`, `build-orangepi3b/` and the matching `install-*/`) let multiple platforms coexist on the same host without stomping each other.
+
+Configuring by hand — `cmake -S . -B build-atom` — is not equivalent: `build_internal.sh` passes `-DCMAKE_INSTALL_PREFIX`, `-DPLATFORM` and the RelWithDebInfo flags that a bare `cmake` invocation defaults differently. Use the presets in `CMakePresets.json` if you need a build tree outside the script.
 
 The script builds:
 

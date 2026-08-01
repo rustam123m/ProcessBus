@@ -30,12 +30,17 @@ else()
 endif()
 link_directories(${DPDK_STATIC_LIBRARY_DIRS})
 
-# libiec61850: GOOSE/R-GOOSE/SV/R-SV
-add_subdirectory(3rdparty/)
-
 # Platform-specific compiler flags. -fno-omit-frame-pointer for perf record -g.
+#
+# These must be set BEFORE add_subdirectory(3rdparty/): CMAKE_C_FLAGS is captured
+# when a subdirectory is processed, so setting them afterwards left every
+# third-party target — libiec61850, googletest and anything added later — built
+# for a generic CPU while only our own sources got -mcpu/-march.
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${TARGET_ARCH_FLAGS} -fno-omit-frame-pointer")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TARGET_ARCH_FLAGS} -fno-strict-aliasing -Wno-unused-result -Wno-volatile -fno-omit-frame-pointer")
+
+# libiec61850: GOOSE/R-GOOSE/SV/R-SV
+add_subdirectory(3rdparty/)
 
 # DPDK's related functions
 function(setup_dpdk TARGET_NAME)

@@ -12,8 +12,8 @@ jobs:
       matrix:
         include:
           - platform: atom
-            build_dir: build
-            install_dir: install
+            build_dir: build-atom
+            install_dir: install-atom
           - platform: qemu
             build_dir: build-qemu
             install_dir: install-qemu
@@ -25,6 +25,7 @@ jobs:
       - name: Build Docker image
         run: docker build -f ci/Dockerfile.debian -t pbus-build .
 
+      # build_internal.sh, not build.sh
       - name: Run build script
         run: |
           docker run --rm \
@@ -32,7 +33,7 @@ jobs:
             -w /workspace \
             --user $(id -u):$(id -g) \
             --cap-add=NET_RAW \
-            pbus-build bash ci/build.sh --platform=${{ matrix.platform }}
+            pbus-build bash ci/build_internal.sh --platform=${{ matrix.platform }}
 
       - name: Run unit tests
         run: |

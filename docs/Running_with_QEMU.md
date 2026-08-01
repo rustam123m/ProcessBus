@@ -6,18 +6,20 @@
 
     **podman build -f ci/Dockerfile.debian --tag pbus_builder**
 
-    Or: `./ci/build.sh --setup`
+    Or: `ci/build.sh --setup`
 
 2. Running the container
 
     **podman run -it --rm -v ~/ProcessBus/:/ProcessBus/:Z --userns=keep-id --name pbus_builder pbus_builder /bin/bash**
 
-    Or: `./ci/build.sh --shell`
+    Or: `ci/build.sh --shell`
 
-3. Inside the container all apps are built with **ci/build.sh**
+3. Inside the container all apps are built with **ci/build_internal.sh**
 
-    - cd /ProcessBus/ci/
-    - ./build.sh
+    - cd /ProcessBus/
+    - ./ci/build_internal.sh --platform=qemu
+
+    From the host, `ci/build.sh --platform=qemu` does steps 2 and 3 in one go.
 
 4. Deploy to a QEMU VM (uploads all binaries and scripts to **/home/user/pbus/**):
 

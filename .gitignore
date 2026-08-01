@@ -19,6 +19,6 @@ tmp/
 *.qcow2
 *.iso
 .*
-
+*.data
 tags
 
