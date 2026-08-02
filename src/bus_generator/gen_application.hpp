@@ -11,6 +11,7 @@ struct GenAppStat
 {
     DPDK::CyclicStat procStat;
     unsigned         errSendCnt = 0;
+    uint64_t         txPktCnt = 0;
 };
 
 /**

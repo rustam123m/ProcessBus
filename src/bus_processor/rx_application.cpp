@@ -491,6 +491,43 @@ void RX_Application::DisplayResults()
             Console::SVStreamSource::PrintTableRow(s);
         }
     }
+
+    // Machine-readable summary for deploy/common/result_parser.sh.
+    uint64_t gooseErrSeq = 0, gooseErrSpdu = 0, svErrSeq = 0, svErrSpdu = 0;
+    for (const auto &src : m_gooseMap) {
+        gooseErrSeq  += src.second->GetErrSeqNum();
+        gooseErrSpdu += src.second->GetErrSpduNum();
+    }
+    for (const auto &src : m_svMap) {
+        svErrSeq  += src.second->GetErrSeqNum();
+        svErrSpdu += src.second->GetErrSpduNum();
+    }
+
+    /*
+     * Keep the markers and key spellings in sync with summary_field() in
+     * deploy/common/result_parser.sh.
+     */
+    std::cout << std::format(
+                     "\nSUMMARY_PROC\n"
+                     "\tReceived      \tgoose_total={}\tsv_total={}\n"
+                     "\tParse errors  \tgoose_parse_err={}\tsv_parse_err={}\n"
+                     "\tUnknown APPID \tgoose_unknown={}\tsv_unknown={}\n"
+                     "\tSecurity      \tauth_fail={}\n"
+                     "\tStream gaps   \tgoose_err_seq={}\tsv_err_smp={}\n"
+                     "\tSPDU gaps     \tgoose_err_spdu={}\tsv_err_spdu={}\n"
+                     "\tNIC counters  \trx_packets={}\timissed={}\tierrors={}\n"
+                     "\t              \trx_nombuf={}\tq_errors={}\n"
+                     "END_SUMMARY_PROC\n",
+                     m_rxGoosePktCnt, m_rxSVPktCnt,
+                     m_errGooseParserCnt, m_errSVParserCnt,
+                     m_rxUnknownGooseCnt, m_rxUnknownSVCnt,
+                     m_errAuthCnt,
+                     gooseErrSeq, svErrSeq,
+                     gooseErrSpdu, svErrSpdu,
+                     m_lastPortStat.ipackets, m_lastPortStat.imissed,
+                     m_lastPortStat.ierrors, m_lastPortStat.rx_nombuf,
+                     m_lastPortStat.q_errors[0])
+              << std::endl;
 }
 
 void RX_Application::Run(StopVarType &doWork)
@@ -554,6 +591,9 @@ void RX_Application::Run(StopVarType &doWork)
     }
     }
     ASM_MARKER(rx_processing_finish);
+
+    // The periodic sample could be up to an interval old.
+    rte_eth_stats_get(port_id, &m_lastPortStat);
 
     // Stop all
     eth.Stop();

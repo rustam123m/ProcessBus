@@ -92,6 +92,7 @@ static void tx_packets_cycle(TxCycleConfig &conf, GenAppStat &stat, GenClass &ge
                     }
 
                     uint16_t nb_tx = rte_eth_tx_burst(conf.nicPortID, conf.nicQueueID, mbufs, num);
+                    stat.txPktCnt += nb_tx;
                     if (nb_tx < num) {
                         for (uint16_t i=nb_tx;i<num;i++) {
                             rte_pktmbuf_free(mbufs[i]);
@@ -242,6 +243,20 @@ void GenApplication::DisplayStatistic()
     Console::CyclicStat::PrintTableHeader({"TxRingFull"});
     Console::CyclicStat::PrintTableRow("Main", m_stat.procStat)
                       << std::format(" {:<10} |\n", m_stat.errSendCnt);
+
+    // err_send is the TX-ring-full count: a run with any is not a valid data point.
+    std::cout << std::format(
+                     "\nSUMMARY_GEN\n"
+                     "\tSent          \ttx_packets={}\n"
+                     "\tTX ring full  \terr_send={}\n"
+                     "\tMain loop     \tload_pct={:.3f}\tmin_us={}\tmax_us={}\n"
+                     "END_SUMMARY_GEN\n",
+                     m_stat.txPktCnt,
+                     m_stat.errSendCnt,
+                     m_stat.procStat.GetLoadPerc(),
+                     m_stat.procStat.GetMinProcUS(),
+                     m_stat.procStat.GetMaxProcUS())
+              << std::endl;
 }
 
 void GenApplication::Run(StopVarType &doWork)

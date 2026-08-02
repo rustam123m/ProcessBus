@@ -63,11 +63,7 @@ echo "Processor:  $PROC_SCRIPT $PROC_ARGS"
 echo "Duration:   ${DURATION}s"
 echo ""
 
-# Start generator
-$GEN_SCRIPT $GEN_ARGS > "$GEN_LOG" 2>&1 &
-GEN_PID=$!
-echo "Generator started (PID=$GEN_PID)"
-
+# Processor first, then the generator.
 # Start processor (override lcores if specified)
 if [ -n "$PROC_LCORES" ]; then
     if [ ! -f "$PROC_SCRIPT" ]; then
@@ -95,6 +91,14 @@ else
     PROC_PID=$!
 fi
 echo "Processor started (PID=$PROC_PID)"
+
+# EAL init, port configure and link-up take a few seconds; without this the
+# generator would still win the race.
+sleep 5
+
+$GEN_SCRIPT $GEN_ARGS > "$GEN_LOG" 2>&1 &
+GEN_PID=$!
+echo "Generator started (PID=$GEN_PID)"
 
 # Verify both started (give them a moment to load)
 sleep 2
