@@ -24,11 +24,12 @@ OPT_UPDATE_SRC=1
 OPT_BUILD_DPDK=1
 OPT_BUILD_PBUS=1
 OPT_REBUILD=0
+OPT_RUN_TESTS=0
 ACTION=""
 
 function usage()
 {
-    echo "Usage: $0 [--platform=atom/qemu/orangepi3b/all] [--update=0/1] [--dpdk=0/1] [--pbus=0/1] [--rebuild] [--clean] [--check]"
+    echo "Usage: $0 [--platform=atom/qemu/orangepi3b/all] [--update=0/1] [--dpdk=0/1] [--pbus=0/1] [--rebuild] [--test] [--clean] [--check]"
     echo ""
     echo "Container-side script. For --setup and --shell, use ci/build.sh."
     exit 1
@@ -149,6 +150,17 @@ function build_apps()
     rebuild_and_install
 }
 
+function run_tests()
+{
+    if [[ -n "$CMAKE_TOOLCHAIN" ]]; then
+        echo "Skipping tests: $PLATFORM is a cross-build"
+        return 0
+    fi
+
+    "$BUILD_DIR/src/tests/unit_tests"
+    "$BUILD_DIR/src/tests/integration_tests"
+}
+
 function check_code()
 {
     mkdir -p $INSTALL_DIR
@@ -197,6 +209,12 @@ while [[ "$#" -gt 0 ]]; do
             OPT_BUILD_DPDK=0
             OPT_BUILD_PBUS=0
             OPT_REBUILD=1
+            ;;
+        --test)
+            OPT_UPDATE_SRC=0
+            OPT_BUILD_DPDK=0
+            OPT_BUILD_PBUS=0
+            OPT_RUN_TESTS=1
             ;;
         --clean|--check)
             ACTION="${1#--}"
@@ -249,6 +267,11 @@ function build_for_platform()
     if [[ "$OPT_REBUILD" -eq 1 ]]; then
         echo "Rebuild apps without cleaning..."
         rebuild_and_install
+    fi
+
+    if [[ "$OPT_RUN_TESTS" -eq 1 ]]; then
+        echo "Running tests..."
+        run_tests
     fi
 }
 

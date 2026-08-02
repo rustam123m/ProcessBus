@@ -20,7 +20,7 @@ PASSTHRU=()
 
 function usage()
 {
-    echo "Usage: $0 [--platform=atom/qemu/orangepi3b/all] [--update=0/1] [--dpdk=0/1] [--pbus=0/1] [--rebuild] [--clean] [--check] [--setup] [--shell]"
+    echo "Usage: $0 [--platform=atom/qemu/orangepi3b/all] [--update=0/1] [--dpdk=0/1] [--pbus=0/1] [--rebuild] [--test] [--clean] [--check] [--setup] [--shell]"
     echo ""
     echo "Runs ci/build_internal.sh inside the builder container for the platform."
     exit 1
