@@ -1,7 +1,22 @@
 # Common sources shared by both test binaries
 set(TEST_COMMON_SOURCES
+    ../common/r_frame_builder.hpp
+    ../common/r_frame_builder.cpp
+
+    ../common/r_session.hpp
+    ../common/r_session.cpp
+    ../common/r_session_crypto.hpp
+    ../common/r_session_crypto.cpp
+
     ../bus_generator/goose_traffic_gen.hpp
     ../bus_generator/goose_traffic_gen.cpp
+    ../bus_generator/r_goose_traffic_gen.hpp
+    ../bus_generator/r_goose_traffic_gen.cpp
+    ../bus_generator/r_sv_traffic_gen.hpp
+    ../bus_generator/r_sv_traffic_gen.cpp
+    ../bus_generator/sv_traffic_gen.hpp
+    ../bus_generator/sv_traffic_gen.cpp
+
     ../bus_processor/process_bus_parser.hpp
     ../bus_processor/process_bus_parser.cpp
 )
@@ -17,6 +32,9 @@ add_executable(${UNIT_TEST}
     goose_container_test.cpp
     sv_container_test.cpp
     parser_error_test.cpp
+    r_session_test.cpp
+    r_routing_test.cpp
+    r_goose_interop_test.cpp
     main.cpp
 )
 target_link_libraries(${UNIT_TEST} PRIVATE gtest gmock gtest_main)
@@ -29,10 +47,11 @@ install(TARGETS ${UNIT_TEST} DESTINATION bin)
 set(INTEGRATION_TEST integration_tests)
 add_executable(${INTEGRATION_TEST}
     ${TEST_COMMON_SOURCES}
-    ../bus_generator/sv_traffic_gen.hpp
-    ../bus_generator/sv_traffic_gen.cpp
     goose_integration_test.cpp
     sv_integration_test.cpp
+    # Needs AF_PACKET: libiec61850's SV publisher has no buffer-only
+    # constructor, so building an SV skeleton opens a raw socket.
+    r_sv_interop_test.cpp
     main.cpp
 )
 target_link_libraries(${INTEGRATION_TEST} PRIVATE gtest gmock gtest_main)

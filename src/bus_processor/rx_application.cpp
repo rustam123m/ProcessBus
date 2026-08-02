@@ -173,7 +173,13 @@ namespace
                     /* rte_prefetch0(bufs[i]); */
                     const uint8_t *packet = rte_pktmbuf_mtod(bufs[i], const uint8_t *);
 
-                    unsigned appid = ProcessBusParser::get_appid(packet);
+                    /*
+                     * The L2 offset lands inside the IPv4 header of a routable
+                     * frame and would scatter one stream across workers.
+                     */
+                    unsigned appid = 0;
+                    ProcessBusParser::get_proto_type(packet, &appid,
+                                                     rte_pktmbuf_pkt_len(bufs[i]));
                     unsigned idx = appid & (workerNum - 1);
 
                     workerQueue[idx].Put(bufs[i]);
@@ -222,6 +228,11 @@ void RX_Application::ParseCmdOptions(int argc, char* argv[])
             ("goose", "The number of unique GOOSE is being reserved", cxxopts::value< int >())
             ("sv80", "The number of unique SV with 80 points", cxxopts::value< int >())
             ("sv256", "The number of unique SV with 256 points", cxxopts::value< int >())
+            ("rgoose", "The number of unique R-GOOSE is being reserved", cxxopts::value< int >())
+            ("rsv80", "The number of unique R-SV with 80 points", cxxopts::value< int >())
+            ("rsv256", "The number of unique R-SV with 256 points", cxxopts::value< int >())
+            ("r-mode", "R-GOOSE/R-SV security: none|hmac|gcm", cxxopts::value< std::string >())
+            ("dst-ip", "R-GOOSE/R-SV destination multicast group", cxxopts::value< std::string >())
             ("goose-entries", "Dataset entries per GOOSE/R-GOOSE (must match the generator)",
                               cxxopts::value< unsigned >());
 
@@ -240,10 +251,28 @@ void RX_Application::ParseCmdOptions(int argc, char* argv[])
         if (result.count("sv256")) {
             m_confSV256Num = result["sv256"].as< int >();
         }
+        if (result.count("rgoose")) {
+            m_confRGooseNum = result["rgoose"].as< int >();
+        }
+        if (result.count("rsv80")) {
+            m_confRSV80Num = result["rsv80"].as< int >();
+        }
+        if (result.count("rsv256")) {
+            m_confRSV256Num = result["rsv256"].as< int >();
+        }
         if (result.count("goose-entries")) {
             m_gooseEntries = result["goose-entries"].as< unsigned >();
             if (m_gooseEntries == 0) {
                 throw std::invalid_argument("--goose-entries must be >= 1");
+            }
+        }
+        if (result.count("r-mode")) {
+            m_rMode = RSess::parse_security_mode(result["r-mode"].as< std::string >());
+        }
+        if (result.count("dst-ip")) {
+            const std::string ip = result["dst-ip"].as< std::string >();
+            if (!RFrame::parse_ipv4(ip.c_str(), m_rDstIP)) {
+                throw std::invalid_argument("Invalid --dst-ip: " + ip);
             }
         }
     } catch (const std::exception &e) {
@@ -314,6 +343,70 @@ void RX_Application::Init(int argc, char* argv[])
             Console::SVStreamSource::PrintCfgTableRow(src);
         }
     }
+
+    /*
+     * Same passport as L2 except the MAC, which is the RFC 1112 mapping of
+     * --dst-ip. L2 and R share the APPID containers.
+     */
+    const MAC rMAC = RFrame::multicast_mac(m_rDstIP);
+
+    if (m_confRGooseNum > 0 || m_confRSV80Num > 0 || m_confRSV256Num > 0) {
+        std::cout << std::format("\n\tRoutable streams: group {}.{}.{}.{} -> {}, security {}\n\n",
+                                 (m_rDstIP >> 24) & 0xFF, (m_rDstIP >> 16) & 0xFF,
+                                 (m_rDstIP >> 8) & 0xFF, m_rDstIP & 0xFF,
+                                 rMAC.toString(), RSess::to_string(m_rMode));
+    }
+
+    if (m_confRGooseNum > 0) {
+        std::cout << "GOOSE entries: " << m_gooseEntries << "\n";
+        Console::GooseSource::PrintCfgTableHeader();
+
+        for (unsigned i=0;i<m_confRGooseNum;++i) {
+            GooseSource::ptr src = std::make_shared< GooseSource >();
+            src->SetMAC(rMAC)
+                .SetAppID(0x0001 + i)
+                .SetGOID(std::format("GOID{:08}", i + 1))
+                .SetDataSetRef(std::format("IED{:08}LDName/LLN0$DataSet", i + 1))
+                .SetGOCBRef(std::format("IED{:08}LDName/LLN0$GO$GOCB", i + 1))
+                .SetCRev(1)
+                .SetNumEntries(m_gooseEntries);
+            m_gooseMap[src->GetPassport()] = src;
+
+            Console::GooseSource::PrintCfgTableRow(src);
+        }
+    }
+
+    if (m_confRSV80Num > 0) {
+        Console::SVStreamSource::PrintCfgTableHeader();
+
+        for (unsigned i=0;i<m_confRSV80Num;++i) {
+            SVStreamSource::ptr src = std::make_shared< SVStreamSource >();
+            src->SetMAC(rMAC)
+                .SetAppID(0x0001 + i)
+                .SetSVID(std::format("SVID{:04}", i + 1))
+                .SetCRev(1)
+                .SetNumASDU(1);
+            m_svMap[src->GetPassport()] = src;
+
+            Console::SVStreamSource::PrintCfgTableRow(src);
+        }
+    }
+
+    if (m_confRSV256Num > 0) {
+        Console::SVStreamSource::PrintCfgTableHeader();
+
+        for (unsigned i=0;i<m_confRSV256Num;++i) {
+            SVStreamSource::ptr src = std::make_shared< SVStreamSource >();
+            src->SetMAC(rMAC)
+                .SetAppID(0x0001 + i)
+                .SetSVID(std::format("SVID{:04}", i + 1))
+                .SetCRev(1)
+                .SetNumASDU(8);
+            m_svMap[src->GetPassport()] = src;
+
+            Console::SVStreamSource::PrintCfgTableRow(src);
+        }
+    }
 }
 
 void RX_Application::DisplayStatistic(unsigned interval_sec)
@@ -359,10 +452,11 @@ void RX_Application::DisplayStatistic(unsigned interval_sec)
                   << std::endl;
     }
 
-    // Proto information
+    // Proto information. Routable streams feed the same counters.
     std::cout << std::format(
                         " Category   | GOOSE      | SV         |\n"
                         "---------------------------------------\n"
+                        "{:<10}  | {:<10} | {:<10} |\n"
                         "{:<10}  | {:<10} | {:<10} |\n"
                         "{:<10}  | {:<10} | {:<10} |\n"
                         "{:<10}  | {:<10} | {:<10} |\n"
@@ -370,6 +464,7 @@ void RX_Application::DisplayStatistic(unsigned interval_sec)
                         "Total",   m_rxGoosePktCnt, m_rxSVPktCnt,
                         "Error",   m_errGooseParserCnt, m_errSVParserCnt,
                         "Unknown", m_rxUnknownGooseCnt, m_rxUnknownSVCnt,
+                        "AuthFail", m_errAuthCnt, "-",
                         "Kernel",  "-", m_pktToKernelCnt
                  )
               << std::endl;
@@ -444,8 +539,13 @@ void RX_Application::Run(StopVarType &doWork)
         break;
     }
     case 2: {
-        // Single core + 1 lcore for sRSS
-        break;
+        /*
+         * multi_core_rss() needs a power-of-two worker count, and one worker is
+         * single_core() with an extra ring hop.
+         */
+        throw std::runtime_error(
+            "2 lcores is not a supported configuration: use 1 lcore (no sRSS) "
+            "or 1 + 2^n workers, e.g. -l 1,2,3");
     }
     default: {
         // Software RSS

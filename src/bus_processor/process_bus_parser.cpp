@@ -301,3 +301,239 @@ int ProcessBusParser::parse_sv_packet(const uint8_t *buffer, int size,
     return 0;
 }
 
+
+namespace
+{
+    /*
+     * Unwrap the routable envelope: bound the session PDU, parse the session
+     * header, verify/decrypt, then read the payload header.
+     *
+     * apduBase set to the start of the APDU on success
+     * Returns APDU size, or a negative error code
+     */
+    int unwrap_r_frame(uint8_t *buffer, int size, uint8_t expectedSI, uint8_t expectedType,
+                       RSess::SecurityMode mode, RSess::Crypto &crypto,
+                       RSess::SessionHeader &session, RSess::PayloadHeader &phdr,
+                       const uint8_t *&apduBase)
+    {
+        /*
+         * The frame may be padded to 60 bytes, so the IPv4 total length bounds
+         * the session PDU, not the frame length.
+         */
+        if (size < (int)(RSess::ETH_IP_UDP_SIZE + RSess::apdu_offset(0))) {
+            return RSess::ERR_TOO_SHORT;
+        }
+        const uint16_t ipTotalLen = NET_TO_CPU_U16(buffer + 16);
+        if (ipTotalLen < 28 || 14 + ipTotalLen > size) {
+            return RSess::ERR_TOO_SHORT;
+        }
+
+        uint8_t* udp = buffer + RSess::ETH_IP_UDP_SIZE;
+        const size_t udpSize = ipTotalLen - 28u;   // minus IPv4 (20) and UDP (8)
+
+        const int phOff = RSess::parse_session(udp, udpSize, session);
+        if (phOff < 0) {
+            return phOff;
+        }
+        if (session.si != expectedSI) {
+            return RSess::ERR_BAD_SI;
+        }
+
+        /*
+         * unseal() is in another translation unit, so SEC_NONE would pay a call
+         * per packet for nothing.
+         */
+        if (mode != RSess::SEC_NONE
+            && !RSess::unseal(udp, udpSize, mode, session, crypto)) {
+            return R_PARSE_ERR_AUTH;
+        }
+
+        const int apduOff = RSess::parse_payload(udp, udpSize, session, phdr);
+        if (apduOff < 0) {
+            return apduOff;
+        }
+        if (phdr.payloadType != expectedType) {
+            return RSess::ERR_BAD_PAYLOAD_TYPE;
+        }
+
+        apduBase = udp + apduOff;
+        return static_cast< int >(phdr.apduSize);
+    }
+}
+
+int ProcessBusParser::parse_r_goose_packet(uint8_t *buffer, int size,
+                                           RSess::SecurityMode mode,
+                                           RSess::Crypto &crypto,
+                                           RSess::SessionHeader &session,
+                                           GoosePassport &passport,
+                                           GooseState &state)
+{
+    RSess::PayloadHeader phdr;
+    const uint8_t* apdu = nullptr;
+
+    const int apduSize = unwrap_r_frame(buffer, size,
+                                        RSess::SI_R_GOOSE, RSess::PAYLOAD_TYPE_GOOSE,
+                                        mode, crypto, session, phdr, apdu);
+    if (apduSize < 0) {
+        return apduSize;
+    }
+
+    passport.dmac = MAC(buffer);
+    passport.appid = phdr.appid;
+
+    /*
+     * A copy of parse_goose_packet's walk: the L2 path must not gain a
+     * base-pointer indirection.
+     */
+    uint32_t pos = 0;
+    if (apduSize < 2 || apdu[pos++] != 0x61) {
+        return -3;
+    }
+    decode_asn1_len(apdu, &pos);
+
+    bool found_gocbref = false, found_dataset = false, found_goid = false;
+    while (pos < (uint32_t)apduSize) {
+        uint8_t tag = apdu[pos++];
+        int itemSize = decode_asn1_len(apdu, &pos);
+        if (pos + itemSize > (uint32_t)apduSize || itemSize == 0) {
+            return -3;
+        }
+
+        switch (tag) {
+        case 0x80: /* gocbRef */
+            passport.gocbref = make_stringview(apdu + pos, itemSize);
+            found_gocbref = true;
+            break;
+        case 0x81: /* timeAllowedToLive */
+            break;
+        case 0x82: /* DatSet */
+            passport.dataset = make_stringview(apdu + pos, itemSize);
+            found_dataset = true;
+            break;
+        case 0x83: /* GoID */
+            passport.goid = make_stringview(apdu + pos, itemSize);
+            found_goid = true;
+            break;
+        case 0x84:
+            if (itemSize >= 4 && itemSize <= 8) {
+                uint64_t ts = NET_TO_CPU_U64(apdu + pos);
+                ts >>= (8 - itemSize) * 8;
+                state.timestamp = ts;
+            }
+            break;
+        case 0x85:
+            state.stNum = decode_asn1_number(apdu + pos, itemSize);
+            break;
+        case 0x86:
+            state.sqNum = decode_asn1_number(apdu + pos, itemSize);
+            break;
+        case 0x87: /* Simulation */
+            break;
+        case 0x88: /* CRev */
+            passport.crev = decode_asn1_number(apdu + pos, itemSize);
+            break;
+        case 0x89: /* NdsCom */
+            break;
+        case 0x8a: /* Num DataSet entries */
+            passport.num = decode_asn1_number(apdu + pos, itemSize);
+            break;
+        case 0xab: /* allData */
+        {
+            const int num = parse_alldata(apdu, pos, pos + itemSize, 0);
+            if (num < 0) {
+                return -101;
+            }
+            passport.allDataOffset = pos;
+            passport.foundEntries = num;
+            break;
+        }
+        case 0x30: // SEQUENCE
+        case 0x31: // SET
+            for (uint32_t end = pos + itemSize; pos < end;) {
+                ++pos; // tag
+                pos += decode_asn1_len(apdu, &pos);
+            }
+            continue;
+        case 0xA0: // Context-specific 0
+        case 0xA1: // Context-specific 1
+            pos += decode_asn1_len(apdu, &pos);
+            continue;
+        default:
+            break;
+        }
+
+        pos += itemSize;
+    }
+    if (passport.foundEntries != passport.num) {
+        return -102;
+    }
+    return (found_gocbref && found_dataset && found_goid) ? 0 : -100;
+}
+
+int ProcessBusParser::parse_r_sv_packet(uint8_t *buffer, int size,
+                                        RSess::SecurityMode mode,
+                                        RSess::Crypto &crypto,
+                                        RSess::SessionHeader &session,
+                                        SVStreamPassport &passport,
+                                        SVStreamState &state)
+{
+    RSess::PayloadHeader phdr;
+    const uint8_t* apdu = nullptr;
+
+    const int apduSize = unwrap_r_frame(buffer, size,
+                                        RSess::SI_R_SV, RSess::PAYLOAD_TYPE_SV,
+                                        mode, crypto, session, phdr, apdu);
+    if (apduSize < 0) {
+        return apduSize;
+    }
+
+    passport.dmac = MAC(buffer);
+    passport.appid = phdr.appid;
+
+    uint32_t pos = 0;
+    if (apduSize < 2 || apdu[pos++] != 0x60) {
+        return -3;
+    }
+    decode_asn1_len(apdu, &pos);
+
+    // noASDU (tag 0x80)
+    if (pos + 3 <= (uint32_t)apduSize && apdu[pos] == 0x80) {
+        passport.num = apdu[pos + 2];
+        pos += 3;
+    }
+
+    // Sequence of ASDUs (tag 0xa2)
+    if (pos >= (uint32_t)apduSize || apdu[pos++] != 0xa2) {
+        return -4;
+    }
+    decode_asn1_len(apdu, &pos);
+
+    // ASDU (tag 0x30)
+    if (pos >= (uint32_t)apduSize || apdu[pos++] != 0x30) {
+        return -5;
+    }
+    decode_asn1_len(apdu, &pos);
+
+    while (pos < (uint32_t)apduSize) {
+        uint8_t tag = apdu[pos++];
+        int length = decode_asn1_len(apdu, &pos);
+        if (pos + length > (uint32_t)apduSize || length <= 0) {
+            break;
+        }
+
+        switch (tag) {
+        case 0x80: // svID
+            passport.svid = make_stringview(apdu + pos, length);
+            break;
+        case 0x82: // smpCnt
+            state.smpCnt = NET_TO_CPU_U16(apdu + pos);
+            break;
+        case 0x83: // confRev
+            passport.crev = NET_TO_CPU_U32(apdu + pos);
+            break;
+        }
+
+        pos += length;
+    }
+    return 0;
+}

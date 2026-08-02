@@ -1,0 +1,99 @@
+Subject: r_session: verify the HMAC trailer at payloadEnd+2, and silence the buffer dump
+
+1) encodePacket() writes the signature trailer as:
+       payloadEnd+0 = 0x85, payloadEnd+1 = length byte, payloadEnd+2.. = tag
+   and the AES-GCM receive path already reads its tag at payloadEnd+2. The
+   signature receive path compared at payloadEnd+1 — carrying its own
+   "TODO is payloadEnd +2 correct?" comment — so the library could not verify
+   an HMAC frame it had produced itself. Both protocol version 1 and version 2
+   receive paths are affected.
+
+2) DEBUG_RSESSION is always defined (to 0 by default), so the "#ifdef
+   DEBUG_RSESSION" guards around printBuffer compiled the hex dump in
+   unconditionally and every encode/decode wrote a packet dump to stdout.
+   The rest of the file already uses "#if (DEBUG_RSESSION == 1)".
+
+diff --git a/src/r_session/r_session.c b/src/r_session/r_session.c
+index 538ad8ec..896b5593 100644
+--- a/src/r_session/r_session.c
++++ b/src/r_session/r_session.c
+@@ -89,7 +89,7 @@ struct sRSession
+     int timeToNextKey;
+ };
+ 
+-#ifdef DEBUG_RSESSION
++#if (DEBUG_RSESSION == 1)
+ static void
+ printBuffer(uint8_t* buffer, int bufSize)
+ {
+@@ -102,7 +102,7 @@ printBuffer(uint8_t* buffer, int bufSize)
+             printf(" (%i)\n", i + 1);
+     }
+ }
+-#endif /* DEBUG_RSESSION */
++#endif /* DEBUG_RSESSION == 1 */
+ 
+ RSessionKeyMaterial
+ RSessionKeyMaterial_create(uint32_t keyId, uint8_t* key, int keyLength, RSecurityAlgorithm secAlgo, RSignatureAlgorithm sigAlgo)
+@@ -559,8 +559,8 @@ parseSessionMessage(RSession self, uint8_t* buffer, int msgSize, RSessionPayload
+                     {
+                         if (sigAlgo == R_SESSION_SIG_ALGO_HMAC_SHA256_128)
+                         {
+-                            /* TODO is payloadEnd +2 correct? */
+-                            if (memcmp(signatureBuffer, buffer + payloadEnd + 1, 16))
++                            /* payloadEnd + 0 = 0x85, +1 = length byte, +2 = tag */
++                            if (memcmp(signatureBuffer, buffer + payloadEnd + 2, 16))
+                             {
+                                 DEBUG_PRINTF("ERROR - signature not matching!");
+                                 goto exit_error;
+@@ -568,8 +568,8 @@ parseSessionMessage(RSession self, uint8_t* buffer, int msgSize, RSessionPayload
+                         }
+                         else if (sigAlgo == R_SESSION_SIG_ALGO_HMAC_SHA256_256)
+                         {
+-                            /* TODO is payloadEnd +2 correct? */
+-                            if (memcmp(signatureBuffer, buffer + payloadEnd + 1, 32))
++                            /* payloadEnd + 0 = 0x85, +1 = length byte, +2 = tag */
++                            if (memcmp(signatureBuffer, buffer + payloadEnd + 2, 32))
+                             {
+                                 DEBUG_PRINTF("ERROR - signature not matching!");
+                                 goto exit_error;
+@@ -711,8 +711,8 @@ parseSessionMessage(RSession self, uint8_t* buffer, int msgSize, RSessionPayload
+                     {
+                         if (sigAlgo == R_SESSION_SIG_ALGO_HMAC_SHA256_128)
+                         {
+-                            /* TODO is payloadEnd +2 correct? */
+-                            if (memcmp(signatureBuffer, buffer + payloadEnd + 1, 16))
++                            /* payloadEnd + 0 = 0x85, +1 = length byte, +2 = tag */
++                            if (memcmp(signatureBuffer, buffer + payloadEnd + 2, 16))
+                             {
+                                 DEBUG_PRINTF("ERROR - signature not matching!");
+                                 goto exit_error;
+@@ -720,8 +720,8 @@ parseSessionMessage(RSession self, uint8_t* buffer, int msgSize, RSessionPayload
+                         }
+                         else if (sigAlgo == R_SESSION_SIG_ALGO_HMAC_SHA256_256)
+                         {
+-                            /* TODO is payloadEnd +2 correct? */
+-                            if (memcmp(signatureBuffer, buffer + payloadEnd + 1, 32))
++                            /* payloadEnd + 0 = 0x85, +1 = length byte, +2 = tag */
++                            if (memcmp(signatureBuffer, buffer + payloadEnd + 2, 32))
+                             {
+                                 DEBUG_PRINTF("ERROR - signature not matching!");
+                                 goto exit_error;
+@@ -1000,7 +1000,7 @@ encodePacket(RSession self, uint8_t payloadType, uint8_t* buffer, int bufPos, RS
+         int addPartSize = encryptedPartStartPos - startPos;
+         int encryptedPartSize = payloadEndPos - encryptedPartStartPos;
+ 
+-#ifdef DEBUG_RSESSION
++#if (DEBUG_RSESSION == 1)
+         printBuffer(buffer + startPos, bufPos - startPos);
+ #endif
+ 
+@@ -1053,7 +1053,7 @@ RSession_sendMessage(RSession self, RSessionProtocol_SPDU_ID spduId, bool simula
+ 
+         int msgSize = encodePacket(self, (uint8_t) spduId, self->sendBuffer, 0, &element);
+ 
+-#ifdef DEBUG_RSESSION
++#if (DEBUG_RSESSION == 1)
+         printBuffer(self->sendBuffer, msgSize);
+ #endif
+ 

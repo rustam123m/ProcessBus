@@ -4,6 +4,8 @@
 #include "common/shared_defs.hpp"
 #include "common/goose_container.hpp"
 #include "common/sv_container.hpp"
+#include "common/r_frame_builder.hpp"
+#include "common/r_session.hpp"
 
 #include "dpdk_cpp/dpdk_cyclestat_class.hpp"
 #include "dpdk_cpp/dpdk_port_class.hpp"
@@ -51,9 +53,15 @@ public:
     // Settings
     unsigned        m_confGooseNum = 0,
                     m_confSV80Num = 0,
-                    m_confSV256Num = 0;
+                    m_confSV256Num = 0,
+                    m_confRGooseNum = 0,
+                    m_confRSV80Num = 0,
+                    m_confRSV256Num = 0;
+
+    RSess::SecurityMode m_rMode = RSess::SEC_NONE;
 
     unsigned        m_gooseEntries = DEF_GOOSE_ENTRIES;
+    uint32_t        m_rDstIP = R_DEFAULT_DST_IP;
 
     // Runtime
     GooseContainer  m_gooseMap;
@@ -63,6 +71,7 @@ public:
     uint64_t        m_rxGoosePktCnt = 0, m_rxSVPktCnt = 0,
                     m_errGooseParserCnt = 0, m_errSVParserCnt = 0,
                     m_rxUnknownGooseCnt = 0, m_rxUnknownSVCnt = 0,
+                    m_errAuthCnt = 0,
                     m_pktToKernelCnt = 0;
     rte_eth_stats   m_lastPortStat = {};
     unsigned        m_statDisplaySec = 0;

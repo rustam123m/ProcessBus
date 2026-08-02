@@ -149,7 +149,7 @@ TEST(GooseFastParser, GetProtoType_VLAN)
     ASSERT_GT(size, 0u);
 
     unsigned appid = 0;
-    BUS_PROTO type = ProcessBusParser::get_proto_type(packet, &appid);
+    BUS_PROTO type = ProcessBusParser::get_proto_type(packet, &appid, size);
     ASSERT_EQ(type, BUS_PROTO_GOOSE);
     ASSERT_EQ(appid, 0x1234) << "get_proto_type returned wrong APPID for VLAN GOOSE";
 }

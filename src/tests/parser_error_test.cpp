@@ -143,7 +143,7 @@ TEST(ProtoType, UnknownEtherType)
     packet[13] = 0x00;
 
     unsigned appid = 0;
-    ASSERT_EQ(ProcessBusParser::get_proto_type(packet, &appid), NON_BUS_PROTO);
+    ASSERT_EQ(ProcessBusParser::get_proto_type(packet, &appid, sizeof(packet)), NON_BUS_PROTO);
 }
 
 TEST(ProtoType, NonVLAN_SV)
@@ -153,7 +153,7 @@ TEST(ProtoType, NonVLAN_SV)
     packet[14] = 0x00; packet[15] = 0x42; // APPID = 0x0042
 
     unsigned appid = 0;
-    ASSERT_EQ(ProcessBusParser::get_proto_type(packet, &appid), BUS_PROTO_SV);
+    ASSERT_EQ(ProcessBusParser::get_proto_type(packet, &appid, sizeof(packet)), BUS_PROTO_SV);
     ASSERT_EQ(appid, 0x0042);
 }
 
@@ -186,8 +186,7 @@ namespace
     /*
      * Minimal non-VLAN GOOSE. Entries are appended verbatim so a test can build
      * a dataset that disagrees with numDatSetEntries. The PDU is padded via the
-     * GoID to fill the frame exactly: parse_goose_packet walks to `size`, so
-     * trailing bytes would be read as further tags.
+     * GoID: parse_goose_packet walks to `size`.
      */
     std::vector<uint8_t> make_goose(uint8_t declaredEntries,
                                     const std::vector<uint8_t> &entries)

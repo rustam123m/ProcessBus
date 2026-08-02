@@ -14,6 +14,8 @@
 
 #include "goose_traffic_gen.hpp"
 #include "sv_traffic_gen.hpp"
+#include "r_goose_traffic_gen.hpp"
+#include "r_sv_traffic_gen.hpp"
 
 #include "cxxopts.hpp"
 
@@ -126,6 +128,32 @@ static void tx_packets_cycle(TxCycleConfig &conf, GenAppStat &stat, GenClass &ge
 }
 
 
+/*
+ * Security mode is a template parameter so the non-secure path keeps the L2
+ * field writes and the hot loop stays branch-free.
+ */
+template<
+    typename GenClass,
+    size_t (GenClass::*AmendNone)(uint8_t *, const typename GenClass::Desc &),
+    size_t (GenClass::*AmendHmac)(uint8_t *, const typename GenClass::Desc &),
+    size_t (GenClass::*AmendGcm)(uint8_t *, const typename GenClass::Desc &)
+>
+static void tx_r_packets_cycle(TxCycleConfig &conf, GenAppStat &stat, GenClass &gen,
+                               RSess::SecurityMode mode, StopVarType &doWork)
+{
+    switch (mode) {
+    case RSess::SEC_NONE:
+        tx_packets_cycle< GenClass, AmendNone >(conf, stat, gen, doWork);
+        break;
+    case RSess::SEC_HMAC:
+        tx_packets_cycle< GenClass, AmendHmac >(conf, stat, gen, doWork);
+        break;
+    case RSess::SEC_GCM:
+        tx_packets_cycle< GenClass, AmendGcm >(conf, stat, gen, doWork);
+        break;
+    }
+}
+
 GenApplication::GenApplication(int argc, char *argv[])
 {
     try {
@@ -136,6 +164,12 @@ GenApplication::GenApplication(int argc, char *argv[])
             ("goose", "The number of unique GOOSE to generate and the frequency", cxxopts::value<std::vector<int>>())
             ("sv80", "The number of unique SV with 80 points", cxxopts::value<int>())
             ("sv256", "The number of unique SV with 256 points", cxxopts::value<int>())
+            ("rgoose", "The number of unique R-GOOSE to generate and the frequency", cxxopts::value<std::vector<int>>())
+            ("rsv80", "The number of unique R-SV with 80 points", cxxopts::value<int>())
+            ("rsv256", "The number of unique R-SV with 256 points", cxxopts::value<int>())
+            ("r-mode", "R-GOOSE/R-SV security: none|hmac|gcm", cxxopts::value<std::string>())
+            ("dst-ip", "R-GOOSE/R-SV destination multicast group", cxxopts::value<std::string>())
+            ("src-ip", "R-GOOSE/R-SV source address", cxxopts::value<std::string>())
             ("goose-entries", "Dataset entries per GOOSE/R-GOOSE (must match the processor)",
                               cxxopts::value<unsigned>());
 
@@ -160,10 +194,41 @@ GenApplication::GenApplication(int argc, char *argv[])
         if (result.count("sv256")) {
             m_sv256Num = result["sv256"].as<int>();
         }
+
+        if (result.count("rgoose")) {
+            auto opts = result["rgoose"].as<std::vector<int>>();
+            if (opts.size() != 2) {
+                throw std::invalid_argument("The rgoose option is invalid, must be: N,M");
+            }
+
+            m_rgooseNum = opts[0];
+            m_rgooseSendFreq = opts[1];
+        }
+        if (result.count("rsv80")) {
+            m_rsv80Num = result["rsv80"].as<int>();
+        }
+        if (result.count("rsv256")) {
+            m_rsv256Num = result["rsv256"].as<int>();
+        }
+        if (result.count("r-mode")) {
+            m_rframe.mode = RSess::parse_security_mode(result["r-mode"].as<std::string>());
+        }
+        if (result.count("dst-ip")) {
+            const std::string ip = result["dst-ip"].as<std::string>();
+            if (!RFrame::parse_ipv4(ip.c_str(), m_rframe.dstIP)) {
+                throw std::invalid_argument("Invalid --dst-ip: " + ip);
+            }
+        }
         if (result.count("goose-entries")) {
             m_gooseEntries = result["goose-entries"].as<unsigned>();
             if (m_gooseEntries == 0) {
                 throw std::invalid_argument("--goose-entries must be >= 1");
+            }
+        }
+        if (result.count("src-ip")) {
+            const std::string ip = result["src-ip"].as<std::string>();
+            if (!RFrame::parse_ipv4(ip.c_str(), m_rframe.srcIP)) {
+                throw std::invalid_argument("Invalid --src-ip: " + ip);
             }
         }
     } catch (const std::exception &e) {
@@ -250,8 +315,44 @@ void GenApplication::Run(StopVarType &doWork)
 
         // Generate cycle with SV packets
         tx_packets_cycle< SVTrafficGen, &SVTrafficGen::AmendPacketSV256 >(conf, m_stat, gen, doWork);
+    } else if (m_rgooseNum > 0) {
+        // R-GOOSE (IEC 61850-90-5)
+        RGooseTrafficGen gen(m_rgooseNum, m_rgooseSendFreq, m_gooseEntries, m_rframe);
+
+        DPDK::PoolSetter(gen.GetSkeletonBuffer(), gen.GetSkeletonSize())
+                        .FillPackets(pool.GetPtr());
+
+        tx_r_packets_cycle< RGooseTrafficGen,
+                            &RGooseTrafficGen::AmendPacket< RSess::SEC_NONE >,
+                            &RGooseTrafficGen::AmendPacket< RSess::SEC_HMAC >,
+                            &RGooseTrafficGen::AmendPacket< RSess::SEC_GCM > >(
+            conf, m_stat, gen, m_rframe.mode, doWork);
+    } else if (m_rsv80Num > 0) {
+        // R-SV 80 points
+        RSVTrafficGen gen(m_rsv80Num, SV_TYPE::SV80, m_rframe);
+
+        DPDK::PoolSetter(gen.GetSkeletonBuffer(), gen.GetSkeletonSize())
+                        .FillPackets(pool.GetPtr());
+
+        tx_r_packets_cycle< RSVTrafficGen,
+                            &RSVTrafficGen::AmendPacketSV80< RSess::SEC_NONE >,
+                            &RSVTrafficGen::AmendPacketSV80< RSess::SEC_HMAC >,
+                            &RSVTrafficGen::AmendPacketSV80< RSess::SEC_GCM > >(
+            conf, m_stat, gen, m_rframe.mode, doWork);
+    } else if (m_rsv256Num > 0) {
+        // R-SV 256 points
+        RSVTrafficGen gen(m_rsv256Num, SV_TYPE::SV256, m_rframe);
+
+        DPDK::PoolSetter(gen.GetSkeletonBuffer(), gen.GetSkeletonSize())
+                        .FillPackets(pool.GetPtr());
+
+        tx_r_packets_cycle< RSVTrafficGen,
+                            &RSVTrafficGen::AmendPacketSV256< RSess::SEC_NONE >,
+                            &RSVTrafficGen::AmendPacketSV256< RSess::SEC_HMAC >,
+                            &RSVTrafficGen::AmendPacketSV256< RSess::SEC_GCM > >(
+            conf, m_stat, gen, m_rframe.mode, doWork);
     } else {
-        std::cerr << "You have to specify GOOSE or SV to generate!\n";
+        std::cerr << "You have to specify GOOSE, SV, R-GOOSE or R-SV to generate!\n";
     }
 
     // Finish delimiter

@@ -101,6 +101,50 @@ Processing packets:
 3. `./run_processor.sh --goose 100`
    Expect 100 GOOSE messages from a generator.
 
+### Routable GOOSE / SV (IEC 61850-90-5)
+
+`--rgoose N,F`, `--rsv80 N` and `--rsv256 N` mirror their L2 counterparts but
+wrap the same APDU in an IPv4/UDP:102 session envelope (protocol version 2).
+`--r-mode` selects the security applied to it:
+
+| Mode | Meaning |
+|------|---------|
+| `none` (default) | no signature, no encryption |
+| `hmac` | HMAC-SHA256-128 over the whole session PDU |
+| `gcm` | AES-128-GCM: payload header and APDU encrypted, session header authenticated |
+
+The key is a hardcoded lab constant — key management is out of scope, so there
+is no key option and no key file.
+
+`--dst-ip` (default `239.192.1.1`) sets the multicast group and must match on
+both sides: the receiver derives the expected destination MAC from it.
+`--src-ip` is generator-only.
+
+```
+./run_generator.sh --rgoose 100,1000 --r-mode gcm
+./run_processor.sh --rgoose 100 --r-mode gcm
+```
+
+Note that L2 and routable streams share the APPID-indexed lookup, so a single
+run must not mix an L2 and a routable stream carrying the same APPID.
+
+#### Isolating the cost of security
+
+Four profiles difference out into three separate costs:
+
+| Comparison | What the delta is |
+|---|---|
+| `--goose` → `--rgoose --r-mode none` | the routable envelope: IPv4/UDP + session parse. **No crypto runs in `none` mode at all** |
+| `--rgoose none` → `--rgoose hmac` | authentication only — the APDU stays in clear |
+| `--rgoose none` → `--rgoose gcm` | encryption + authentication |
+
+`hmac` adds 18 bytes per frame and `gcm` adds 30, so compare at a fixed pps and
+read `Load %` per core, not Mbps.
+
+AES is accelerated on both platforms; SHA-256 only on the Cortex-A55, as mbedtls
+3.6 has no x86 SHA-NI path. HMAC figures are not comparable between the devices,
+AES-GCM ones are.
+
 ## Performance metrics
 
 [Results in nonRT mode](docs/Results_in_nonRT.md)

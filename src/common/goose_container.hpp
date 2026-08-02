@@ -134,6 +134,9 @@ public:
     uint32_t        GetErrSeqNum() const {
         return m_errSeqCnt;
     }
+    uint32_t        GetErrSpduNum() const {
+        return m_errSpduCnt;
+    }
 
     GoosePassport   GetPassport() const {
         GoosePassport pass;
@@ -154,6 +157,18 @@ public:
         return st;
     }
 
+    /*
+     * Track the R-GOOSE session sequence (SPDU Number).
+     *
+     * Zero means "not seen yet", so the first frame never counts as a gap.
+     */
+    void            ProcessSessionState(uint32_t spduNumber) {
+        if (m_spduNumber != 0 && spduNumber != m_spduNumber + 1) {
+            ++m_errSpduCnt;
+        }
+        m_spduNumber = spduNumber;
+    }
+
     void            ProcessState(const GoosePassport &pass,
                                  const GooseState &state) {
         if (m_stNum != state.stNum) {
@@ -170,7 +185,8 @@ public:
             << "\nState:\n"
             << "\tSqNum = " << obj.m_sqNum << "\n"
             << "\tStNum = " << obj.m_stNum << "\n"
-            << "\tErrSeqCnt = " << obj.m_errSeqCnt << "\n";
+            << "\tErrSeqCnt = " << obj.m_errSeqCnt << "\n"
+            << "\tErrSpduCnt = " << obj.m_errSpduCnt << "\n";
         return out;
     }
 
@@ -187,6 +203,7 @@ private:
     // State
     uint32_t    m_stNum = 0, m_sqNum = 0;
     uint32_t    m_errSeqCnt = 0;
+    uint32_t    m_spduNumber = 0, m_errSpduCnt = 0;    // R-GOOSE only
 };
 
 using GooseContainer = AppIdContainer< GoosePassport, GooseSource::ptr >;

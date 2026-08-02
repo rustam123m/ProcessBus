@@ -102,6 +102,9 @@ public:
     uint32_t        GetErrSeqNum() const {
         return m_errSmpCnt;
     }
+    uint32_t        GetErrSpduNum() const {
+        return m_errSpduCnt;
+    }
 
     SVStreamPassport GetPassport() const {
         SVStreamPassport pass;
@@ -111,6 +114,14 @@ public:
         pass.svid = m_svid;
         pass.num = m_numASDU;
         return pass;
+    }
+
+    // R-SV session sequence tracking — see GooseSource::ProcessSessionState().
+    inline void ProcessSessionState(uint32_t spduNumber) {
+        if (m_spduNumber != 0 && spduNumber != m_spduNumber + 1) {
+            ++m_errSpduCnt;
+        }
+        m_spduNumber = spduNumber;
     }
 
     inline void ProcessState(const SVStreamPassport &pass,
@@ -130,7 +141,8 @@ public:
         out << obj.GetPassport()
             << "\nState:\n"
             << "\tSmpCnt    = " << obj.m_smpCnt << "\n"
-            << "\tErrSeqCnt = " << obj.m_errSmpCnt << "\n";
+            << "\tErrSeqCnt = " << obj.m_errSmpCnt << "\n"
+            << "\tErrSpduCnt = " << obj.m_errSpduCnt << "\n";
         return out;
     }
 
@@ -145,6 +157,7 @@ private:
     // State
     uint32_t    m_smpCnt = 0;
     uint32_t    m_errSmpCnt = 0;
+    uint32_t    m_spduNumber = 0, m_errSpduCnt = 0;    // R-SV only
 };
 
 using SVContainer = AppIdContainer< SVStreamPassport, SVStreamSource::ptr >;

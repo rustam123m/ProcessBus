@@ -32,20 +32,22 @@ namespace Console
         }
 
         static void PrintTableHeader() {
-            std::cout << std::format("{:<20} | {:<10} | {:<20} | {:<10} | {:<10} | {:<10} |\n",
-                                     "MAC", "APPID", "GOID", "StNum", "SqNum", "ErrSeqCnt")
-                      << std::string(97, '-')
+            std::cout << std::format("{:<20} | {:<10} | {:<20} | {:<10} | {:<10} | {:<10} | {:<10} |\n",
+                                     "MAC", "APPID", "GOID", "StNum", "SqNum", "ErrSeqCnt",
+                                     "ErrSpduCnt")
+                      << std::string(110, '-')
                       << std::endl;
         }
 
         static void PrintTableRow(::GooseSource::ptr g) {
-            std::cout << std::format("{:<20} | {:<10} | {:<20} | {:<10} | {:<10} | {:<10} |\n",
+            std::cout << std::format("{:<20} | {:<10} | {:<20} | {:<10} | {:<10} | {:<10} | {:<10} |\n",
                                      g->GetPassport().dmac.toString(),
                                      g->GetAppID(),
                                      g->GetGOID(),
                                      g->GetState().stNum,
                                      g->GetState().sqNum,
-                                     g->GetErrSeqNum()
+                                     g->GetErrSeqNum(),
+                                     g->GetErrSpduNum()
                          );
         }
     };
@@ -70,19 +72,21 @@ namespace Console
         }
 
         static void PrintTableHeader() {
-            std::cout << std::format("{:<20} | {:<10} | {:<20} | {:<10} | {:<10} |\n",
-                                     "DMAC", "APPID", "SVID", "SmpCnt", "ErrSeqCnt")
-                      << std::string(84, '-')
+            std::cout << std::format("{:<20} | {:<10} | {:<20} | {:<10} | {:<10} | {:<10} |\n",
+                                     "DMAC", "APPID", "SVID", "SmpCnt", "ErrSeqCnt",
+                                     "ErrSpduCnt")
+                      << std::string(97, '-')
                       << std::endl;
         }
 
         static void PrintTableRow(::SVStreamSource::ptr s) {
-            std::cout << std::format("{:<20} | {:<10} | {:<20} | {:<10} | {:<10} |\n",
+            std::cout << std::format("{:<20} | {:<10} | {:<20} | {:<10} | {:<10} | {:<10} |\n",
                                      s->GetDMAC().toString(),
                                      s->GetAppID(),
                                      s->GetSVID(),
                                      s->GetSmpCnt(),
-                                     s->GetErrSeqNum());
+                                     s->GetErrSeqNum(),
+                                     s->GetErrSpduNum());
         }
     };
 

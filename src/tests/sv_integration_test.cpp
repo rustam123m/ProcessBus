@@ -9,6 +9,7 @@
 #include "sv_subscriber.h"
 
 #include <gtest/gtest.h>
+#include <cstring>
 #include <stdexcept>
 
 class SVMakerByLib
@@ -116,6 +117,36 @@ TEST(SVTrafficGen, BasicUsage)
     }
 }
 
+TEST(SVTrafficGen, SampleValuesAreInitialised)
+{
+    // Regression: without the setters the frame carries uninitialised heap.
+    for (SV_TYPE type : { SV_TYPE::SV80, SV_TYPE::SV256 }) {
+        SVTrafficGen a(1, type), b(1, type);
+
+        ASSERT_EQ(a.GetSkeletonSize(), b.GetSkeletonSize());
+        EXPECT_EQ(0, std::memcmp(a.GetSkeletonBuffer(), b.GetSkeletonBuffer(),
+                                 a.GetSkeletonSize()))
+            << "two SV skeletons built from identical inputs differ";
+
+        // The data section must carry the constants, not leftover heap.
+        const uint8_t* data = a.GetSkeletonBuffer()
+                            + a.GetAsduOffset(0, SV_DATA_OFFSET);
+        for (int ch=0;ch<8;++ch) {
+            const uint8_t* value = data + ch * 8;          // INT32 + Quality
+            EXPECT_EQ(value[0], 0x00);
+            EXPECT_EQ(value[1], 0x00);
+            EXPECT_EQ(value[2], 0x00);
+            EXPECT_EQ(value[3], 100 + ch) << "sample value of channel " << ch;
+
+            const uint8_t* quality = value + 4;
+            EXPECT_EQ(quality[0], 0x00);
+            EXPECT_EQ(quality[1], 0x00);
+            EXPECT_EQ(quality[2], 0x00);
+            EXPECT_EQ(quality[3], 0x00) << "quality of channel " << ch;
+        }
+    }
+}
+
 TEST(SVFastParser, GetProtoType_VLAN)
 {
     uint8_t packet[MAX_SV_PACKET_SIZE] = { 0 };
@@ -124,7 +155,7 @@ TEST(SVFastParser, GetProtoType_VLAN)
     ASSERT_GT(size, 0u);
 
     unsigned appid = 0;
-    BUS_PROTO type = ProcessBusParser::get_proto_type(packet, &appid);
+    BUS_PROTO type = ProcessBusParser::get_proto_type(packet, &appid, size);
     ASSERT_EQ(type, BUS_PROTO_SV);
     ASSERT_EQ(appid, 0x5678) << "get_proto_type returned wrong APPID for VLAN SV";
 }

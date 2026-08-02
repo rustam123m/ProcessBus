@@ -32,6 +32,9 @@ struct GooseSourceIED
     uint32_t    stNum = 0;
     uint32_t    sqNum = 0;
     uint64_t    timestamp = 0;
+
+    // R-GOOSE only: each IED is an independent publisher and owns its sequence.
+    uint32_t    spduNumber = 0;
 };
 
 struct GoosePacketDesc
@@ -74,7 +77,9 @@ public:
     size_t      GetSkeletonSize() const { return m_skeletonSize; }
     uint8_t*    GetSkeletonBuffer() { return m_skeleton; }
 
-    GooseTrafficGen::TxUnitArray& GetTxUnits() { return m_units; }   
+    const uint16_t* GetOffsets() const { return m_offsets; }
+
+    GooseTrafficGen::TxUnitArray& GetTxUnits() { return m_units; }
 
 private:
     void        InitIED(GooseSourceIED &ied, unsigned idx);

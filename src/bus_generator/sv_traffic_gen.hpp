@@ -23,6 +23,9 @@ struct SVSourceIED
     char sID[4 + 1] = { 0 }; // Is used in Patterns
 
     uint16_t smpCnt = 0;
+
+    // R-SV only: one session sequence per stream — see GooseSourceIED::spduNumber.
+    uint32_t spduNumber = 0;
 };
 
 struct SVPacketDesc
@@ -76,7 +79,13 @@ public:
     size_t      GetSkeletonSize() const { return m_skeletonSize; }
     uint8_t*    GetSkeletonBuffer() { return m_skeleton; }
 
-    SVTrafficGen::TxUnitArray& GetTxUnits() { return m_units; }   
+    uint16_t    GetAppidOffset() const { return m_appidOffset; }
+    uint16_t    GetAsduOffset(unsigned asdu, unsigned field) const {
+        return m_asduOffs[asdu][field];
+    }
+    unsigned    GetSmpCntFreq() const { return m_freq; }
+
+    SVTrafficGen::TxUnitArray& GetTxUnits() { return m_units; }
 
 private:
     void InitIED(SVSourceIED &ied, unsigned idx);
