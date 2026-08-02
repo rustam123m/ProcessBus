@@ -13,3 +13,5 @@ enum ThreadCores
     DEF_BUS_TX_CPU = 2
 };
 
+constexpr unsigned DEF_GOOSE_ENTRIES = 16;
+

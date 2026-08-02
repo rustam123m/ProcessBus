@@ -53,6 +53,8 @@ public:
                     m_confSV80Num = 0,
                     m_confSV256Num = 0;
 
+    unsigned        m_gooseEntries = DEF_GOOSE_ENTRIES;
+
     // Runtime
     GooseContainer  m_gooseMap;
     SVContainer     m_svMap;

@@ -135,7 +135,9 @@ GenApplication::GenApplication(int argc, char *argv[])
             ("h,help", "Print usage")
             ("goose", "The number of unique GOOSE to generate and the frequency", cxxopts::value<std::vector<int>>())
             ("sv80", "The number of unique SV with 80 points", cxxopts::value<int>())
-            ("sv256", "The number of unique SV with 256 points", cxxopts::value<int>());
+            ("sv256", "The number of unique SV with 256 points", cxxopts::value<int>())
+            ("goose-entries", "Dataset entries per GOOSE/R-GOOSE (must match the processor)",
+                              cxxopts::value<unsigned>());
 
         auto result = options.parse(argc, argv);
         if (result.count("help")) {
@@ -157,6 +159,12 @@ GenApplication::GenApplication(int argc, char *argv[])
         }
         if (result.count("sv256")) {
             m_sv256Num = result["sv256"].as<int>();
+        }
+        if (result.count("goose-entries")) {
+            m_gooseEntries = result["goose-entries"].as<unsigned>();
+            if (m_gooseEntries == 0) {
+                throw std::invalid_argument("--goose-entries must be >= 1");
+            }
         }
     } catch (const std::exception &e) {
         std::cerr << "cxxopts: Error parsing options: " << e.what() << std::endl;
@@ -217,8 +225,7 @@ void GenApplication::Run(StopVarType &doWork)
     // Main cycle
     if (m_gooseNum > 0) {
         // GOOSE
-        const unsigned DEF_GOOSE_ENTRIES = 16;
-        GooseTrafficGen gen(m_gooseNum, m_gooseSendFreq, DEF_GOOSE_ENTRIES);
+        GooseTrafficGen gen(m_gooseNum, m_gooseSendFreq, m_gooseEntries);
 
         DPDK::PoolSetter(gen.GetSkeletonBuffer(), gen.GetSkeletonSize())
                         .FillPackets(pool.GetPtr());

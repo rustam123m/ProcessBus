@@ -221,7 +221,9 @@ void RX_Application::ParseCmdOptions(int argc, char* argv[])
             ("h,help", "Print usage")
             ("goose", "The number of unique GOOSE is being reserved", cxxopts::value< int >())
             ("sv80", "The number of unique SV with 80 points", cxxopts::value< int >())
-            ("sv256", "The number of unique SV with 256 points", cxxopts::value< int >());
+            ("sv256", "The number of unique SV with 256 points", cxxopts::value< int >())
+            ("goose-entries", "Dataset entries per GOOSE/R-GOOSE (must match the generator)",
+                              cxxopts::value< unsigned >());
 
         auto result = options.parse(argc, argv);
         if (result.count("help")) {
@@ -238,6 +240,12 @@ void RX_Application::ParseCmdOptions(int argc, char* argv[])
         if (result.count("sv256")) {
             m_confSV256Num = result["sv256"].as< int >();
         }
+        if (result.count("goose-entries")) {
+            m_gooseEntries = result["goose-entries"].as< unsigned >();
+            if (m_gooseEntries == 0) {
+                throw std::invalid_argument("--goose-entries must be >= 1");
+            }
+        }
     } catch (const std::exception &e) {
         std::cerr << "cxxopts: Error parsing options: " << e.what() << std::endl;
         throw;
@@ -252,6 +260,7 @@ void RX_Application::Init(int argc, char* argv[])
 
     if (m_confGooseNum > 0) {
         // Table header
+        std::cout << "GOOSE entries: " << m_gooseEntries << "\n";
         Console::GooseSource::PrintCfgTableHeader();
 
         for (unsigned i=0;i<m_confGooseNum;++i) {
@@ -262,7 +271,7 @@ void RX_Application::Init(int argc, char* argv[])
                 .SetDataSetRef(std::format("IED{:08}LDName/LLN0$DataSet", i + 1))
                 .SetGOCBRef(std::format("IED{:08}LDName/LLN0$GO$GOCB", i + 1))
                 .SetCRev(1)
-                .SetNumEntries(16);
+                .SetNumEntries(m_gooseEntries);
             m_gooseMap[src->GetPassport()] = src;
 
             // Table row
