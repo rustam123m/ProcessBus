@@ -19,7 +19,6 @@ NIC_PCI_ADDRS=(
     0000:05:00.0
     0000:06:00.0
     0000:07:00.0
-    0000:08:00.0
 )
 
 # --- Sanity: hugepages reserved at boot? ---

@@ -35,6 +35,14 @@ sudo apt install -y --no-install-recommends \
 The deploy flow assumes `jarvis` with sudo. Default Armbian image creates
 this; `123` is the password used in this repo's setup helpers.
 
+`deploy.sh` runs `sudo bash setup_platform.sh` over SSH without a TTY, so sudo
+must not prompt:
+
+```bash
+echo "jarvis ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/jarvis
+sudo chmod 440 /etc/sudoers.d/jarvis
+```
+
 ### 1.3 SSH (over `end0`)
 
 `end0` is the only routable interface — when the i225 is bound to
