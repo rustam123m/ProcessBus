@@ -172,7 +172,8 @@ GenApplication::GenApplication(int argc, char *argv[])
             ("dst-ip", "R-GOOSE/R-SV destination multicast group", cxxopts::value<std::string>())
             ("src-ip", "R-GOOSE/R-SV source address", cxxopts::value<std::string>())
             ("goose-entries", "Dataset entries per GOOSE/R-GOOSE (must match the processor)",
-                              cxxopts::value<unsigned>());
+                              cxxopts::value<unsigned>())
+            ("time", "Stop after N seconds, 0 to run until interrupted", cxxopts::value<unsigned>());
 
         auto result = options.parse(argc, argv);
         if (result.count("help")) {
@@ -220,6 +221,9 @@ GenApplication::GenApplication(int argc, char *argv[])
                 throw std::invalid_argument("Invalid --dst-ip: " + ip);
             }
         }
+        if (result.count("time")) {
+            m_runTimeSec = result["time"].as<unsigned>();
+        }
         if (result.count("goose-entries")) {
             m_gooseEntries = result["goose-entries"].as<unsigned>();
             if (m_gooseEntries == 0) {
@@ -238,7 +242,39 @@ GenApplication::GenApplication(int argc, char *argv[])
     }
 }
 
-void GenApplication::DisplayStatistic()
+void GenApplication::DisplayStatistic(unsigned interval_sec)
+{
+    rte_eth_stats start = m_lastPortStat;
+    unsigned port_id = 0;
+    rte_eth_stats_get(port_id, &m_lastPortStat);
+    m_statDisplaySec += interval_sec;
+
+    uint64_t tx_pps = (m_lastPortStat.opackets - start.opackets) / interval_sec;
+    uint64_t tx_bps = (m_lastPortStat.obytes - start.obytes) / interval_sec;
+
+    std::cout << std::format("\nTime {} sec\n\n", m_statDisplaySec);
+
+    std::cout << std::format(
+                        "            | TX         |\n"
+                        "--------------------------\n"
+                        "Load(Mbps)  | {:<10.1f} |\n"
+                        "PPS         | {:<10} |\n"
+                        "Packets     | {:<10} |\n"
+                        "Errors      | {:<10} |\n"
+                        "TxRingFull  | {:<10} |\n",
+                        tx_bps * 8 / 1000000.0,
+                        tx_pps,
+                        m_lastPortStat.opackets,
+                        m_lastPortStat.oerrors,
+                        m_stat.errSendCnt
+                 )
+              << std::endl;
+
+    Console::CyclicStat::PrintTableHeader();
+    Console::CyclicStat::PrintTableRow("Main", m_stat.procStat) << "\n";
+}
+
+void GenApplication::DisplayResults()
 {
     Console::CyclicStat::PrintTableHeader({"TxRingFull"});
     Console::CyclicStat::PrintTableRow("Main", m_stat.procStat)
@@ -375,6 +411,6 @@ void GenApplication::Run(StopVarType &doWork)
                              "", " FINISH ", "");
 
     port.Stop();
-    DisplayStatistic();
+    DisplayResults();
 }
 

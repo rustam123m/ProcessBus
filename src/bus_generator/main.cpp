@@ -12,13 +12,14 @@
 
 volatile bool g_doWork = true;
 
-static void* auxiliary_thread()
+static void* auxiliary_thread(GenApplication::ptr app)
 {
     set_thread_name("aux_thread");
     pin_thread_to_cpu(0, 1);
 
+    const unsigned TIMER_PERIOD_SEC = 3;
     int signalFD = create_signalfd();
-    int timerFD = create_timerfd();
+    int timerFD = create_timerfd(TIMER_PERIOD_SEC);
 
     pollfd fds[2] = {
         { .fd = signalFD, .events= POLLIN, .revents = 0 },
@@ -44,7 +45,11 @@ static void* auxiliary_thread()
             uint64_t expirations = 0;
             read(timerFD, &expirations, sizeof(expirations));
 
-            // TODO: Display statistics
+            app->DisplayStatistic(TIMER_PERIOD_SEC);
+            if (app->IsTimeExpired()) {
+                std::cout << "Run time limit reached, exiting" << std::endl;
+                g_doWork = false;
+            }
         }
     }
 
@@ -81,17 +86,21 @@ int main(int argc, char *argv[])
     // RT
     init_linuxrt();
 
-    // Start auxiliary thread: signals & statistics
-    std::thread auxThread(auxiliary_thread);
-
     // Thread identity, CPU core by DPDK's command
     set_thread_name("main");
 
-    // Packet generator
-    try {
-        GenApplication app(argc, argv);
+    // Start auxiliary thread: signals & statistics
+    std::thread auxThread;
 
-        app.Run(g_doWork);
+    // Packet generator
+    GenApplication::ptr app;
+
+    try {
+        app = std::make_shared< GenApplication >(argc, argv);
+
+        auxThread = std::thread(auxiliary_thread, app);
+
+        app->Run(g_doWork);
     } catch (const std::exception &exp) {
         std::cerr << "Exception: " << exp.what() << std::endl;
         g_doWork = false;

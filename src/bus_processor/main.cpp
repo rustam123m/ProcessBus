@@ -48,6 +48,10 @@ static void* auxiliary_thread(RX_Application::ptr app)
             read(timerFD, &expirations, sizeof(expirations));
 
             app->DisplayStatistic(TIMER_PERIOD_SEC);
+            if (app->IsTimeExpired()) {
+                std::cout << "Run time limit reached, exiting" << std::endl;
+                g_doWork = false;
+            }
         }
     }
 

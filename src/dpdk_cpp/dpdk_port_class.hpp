@@ -84,20 +84,27 @@ namespace DPDK
             }
         }
 
+        // First reads after dev_start() can carry the pre-reset status.
         bool WaitLink(unsigned sec = 60) {
-            rte_eth_link link;
-            for (unsigned i=0;i<sec;++i) {
+            const unsigned POLL_US = 100'000, STABLE_NUM = 5;
+
+            rte_eth_link link = {};
+            unsigned stableCnt = 0;
+            for (unsigned i=0;i<sec*(1'000'000/POLL_US);++i) {
                 int retval = rte_eth_link_get_nowait(m_portID, &link);
                 if (retval < 0) {
                     throw std::runtime_error("Failed to get link status: "
                                              + std::string(rte_strerror(-retval)));
-                } else if (link.link_status) {
-                    break;
                 }
 
-                sleep(1);
+                stableCnt = link.link_status ? (stableCnt + 1) : 0;
+                if (stableCnt >= STABLE_NUM) {
+                    return true;
+                }
+
+                usleep(POLL_US);
             }
-            return (link.link_status != 0);
+            return false;
         }
 
         void AddVLAN_Flow(uint16_t vlan_id, uint16_t queue_id) {

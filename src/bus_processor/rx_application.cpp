@@ -234,7 +234,8 @@ void RX_Application::ParseCmdOptions(int argc, char* argv[])
             ("r-mode", "R-GOOSE/R-SV security: none|hmac|gcm", cxxopts::value< std::string >())
             ("dst-ip", "R-GOOSE/R-SV destination multicast group", cxxopts::value< std::string >())
             ("goose-entries", "Dataset entries per GOOSE/R-GOOSE (must match the generator)",
-                              cxxopts::value< unsigned >());
+                              cxxopts::value< unsigned >())
+            ("time", "Stop after N seconds, 0 to run until interrupted", cxxopts::value< unsigned >());
 
         auto result = options.parse(argc, argv);
         if (result.count("help")) {
@@ -259,6 +260,9 @@ void RX_Application::ParseCmdOptions(int argc, char* argv[])
         }
         if (result.count("rsv256")) {
             m_confRSV256Num = result["rsv256"].as< int >();
+        }
+        if (result.count("time")) {
+            m_runTimeSec = result["time"].as< unsigned >();
         }
         if (result.count("goose-entries")) {
             m_gooseEntries = result["goose-entries"].as< unsigned >();

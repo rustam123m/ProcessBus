@@ -30,6 +30,8 @@ done
 
 GEN_LOG="/tmp/gen.log"
 PROC_LOG="/tmp/proc.log"
+APPS='bus_generator|bus_processor'
+STOP_DEADLINE=10
 
 cleanup() {
     # Kill both if still running
@@ -39,9 +41,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Clean up stale DPDK state from previous runs
-killall -9 bus_generator bus_processor 2>/dev/null || true
-sleep 2
+if pgrep -x "$APPS" > /dev/null; then
+    echo "ERROR: apps from a previous run are still alive: $(pgrep -xa "$APPS")"
+    exit 1
+fi
+
 rm -rf /var/run/dpdk/
 rm -f "$GEN_LOG" "$PROC_LOG"
 
@@ -64,39 +68,20 @@ echo "Duration:   ${DURATION}s"
 echo ""
 
 # Processor first, then the generator.
-# Start processor (override lcores if specified)
-if [ -n "$PROC_LCORES" ]; then
-    if [ ! -f "$PROC_SCRIPT" ]; then
-        echo "ERROR: Processor script not found: $PROC_SCRIPT"
-        exit 1
-    fi
-
-    source_nic=$(grep "NIC_PCI_ADDR" "$PROC_SCRIPT" | head -1 | grep -v "^#" | cut -d'"' -f2 || true)
-    hugedir=$(grep -oP '/mnt/[^ /]+/' "$PROC_SCRIPT" | head -1 || true)
-    prefix=$(grep -oP 'file-prefix=\K[^ ]+' "$PROC_SCRIPT" | head -1 || true)
-
-    if [ -z "$source_nic" ] || [ -z "$hugedir" ] || [ -z "$prefix" ]; then
-        echo "ERROR: Could not parse NIC/hugedir/prefix from $PROC_SCRIPT"
-        exit 1
-    fi
-
-    bin/bus_processor -l "$PROC_LCORES" \
-        -a "$source_nic" \
-        --huge-dir="$hugedir" \
-        --file-prefix="$prefix" \
-        -- $PROC_ARGS > "$PROC_LOG" 2>&1 &
-    PROC_PID=$!
-else
-    $PROC_SCRIPT $PROC_ARGS > "$PROC_LOG" 2>&1 &
-    PROC_PID=$!
+if [ ! -f "$PROC_SCRIPT" ]; then
+    echo "ERROR: Processor script not found: $PROC_SCRIPT"
+    exit 1
 fi
+
+LCORES="$PROC_LCORES" $PROC_SCRIPT $PROC_ARGS --time $((DURATION + 10)) > "$PROC_LOG" 2>&1 &
+PROC_PID=$!
 echo "Processor started (PID=$PROC_PID)"
 
 # EAL init, port configure and link-up take a few seconds; without this the
 # generator would still win the race.
 sleep 5
 
-$GEN_SCRIPT $GEN_ARGS > "$GEN_LOG" 2>&1 &
+$GEN_SCRIPT $GEN_ARGS --time "$DURATION" > "$GEN_LOG" 2>&1 &
 GEN_PID=$!
 echo "Generator started (PID=$GEN_PID)"
 
@@ -114,18 +99,18 @@ if ! kill -0 "$PROC_PID" 2>/dev/null; then
     exit 1
 fi
 
-# Wait for test duration, streaming the processor's periodic stats live.
-# `timeout` kills tail after DURATION; tail's non-zero exit on signal is expected.
 echo "Running for ${DURATION}s..."
-timeout "$DURATION" tail -F -n +1 "$PROC_LOG" 2>/dev/null || true
-
-# Stop both gracefully
-echo "Stopping..."
-kill -INT "$GEN_PID" 2>/dev/null || true
-kill -INT "$PROC_PID" 2>/dev/null || true
-
-# Wait for clean exit
 wait "$GEN_PID" 2>/dev/null || true
 wait "$PROC_PID" 2>/dev/null || true
+
+sudo killall -9 bus_generator bus_processor 2>/dev/null || true
+for _ in $(seq "$STOP_DEADLINE"); do
+    pgrep -x "$APPS" > /dev/null || break
+    sleep 1
+done
+if pgrep -x "$APPS" > /dev/null; then
+    echo "ERROR: apps survived kill -9: $(pgrep -xa "$APPS")"
+    exit 1
+fi
 
 echo "Done. Logs: $GEN_LOG $PROC_LOG"

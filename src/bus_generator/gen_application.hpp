@@ -4,6 +4,7 @@
 #include "common/shared_defs.hpp"
 #include "common/r_frame_builder.hpp"
 #include "dpdk_cpp/dpdk_cyclestat_class.hpp"
+#include "dpdk_cpp/dpdk_port_class.hpp"
 
 using StopVarType = volatile bool;
 
@@ -21,9 +22,16 @@ struct GenAppStat
 class GenApplication
 {
 public:
+    using ptr = std::shared_ptr< GenApplication >;
+
     GenApplication(int argc, char *argv[]);
 
-    void DisplayStatistic();
+    void DisplayStatistic(unsigned interval_sec);
+    void DisplayResults();
+
+    bool IsTimeExpired() const {
+        return m_runTimeSec > 0 && m_statDisplaySec >= m_runTimeSec;
+    }
 
     void Run(StopVarType &doWork);
 
@@ -43,6 +51,9 @@ private:
     RFrameConfig m_rframe;
 
     // Statistics
-    GenAppStat m_stat;
+    GenAppStat    m_stat;
+    rte_eth_stats m_lastPortStat = {};
+    unsigned      m_statDisplaySec = 0;
+    unsigned      m_runTimeSec = 0;
 };
 

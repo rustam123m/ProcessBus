@@ -42,6 +42,10 @@ public:
     void DisplayStatistic(unsigned interval_sec);
     void DisplayResults();
 
+    bool IsTimeExpired() const {
+        return m_runTimeSec > 0 && m_statDisplaySec >= m_runTimeSec;
+    }
+
     void Run(StopVarType &doWork);
 
 private:
@@ -75,5 +79,6 @@ public:
                     m_pktToKernelCnt = 0;
     rte_eth_stats   m_lastPortStat = {};
     unsigned        m_statDisplaySec = 0;
+    unsigned        m_runTimeSec = 0;
 };
 
