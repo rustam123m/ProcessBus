@@ -60,6 +60,25 @@ namespace RFrame
         return MAC(bytes);
     }
 
+    constexpr unsigned R_DST_SPREAD = 128;      // groups per run, power of two
+
+    // Group stream idx publishes to.
+    inline uint32_t stream_dst_ip(uint32_t base, unsigned idx)
+    {
+        return base + (idx & (R_DST_SPREAD - 1));
+    }
+
+    // Per-group destination fields, precomputed for the send path.
+    struct DstFields
+    {
+        uint8_t  dmac[6];
+        uint32_t dstIP_be;
+        uint16_t ipCsum_be;
+    };
+
+    // Fill out for dstIP, taking the rest of the header from skeleton.
+    void make_dst_fields(const uint8_t* skeleton, uint32_t dstIP, DstFields& out);
+
     // Parse dotted-quad into host byte order. Returns false on malformed input.
     bool parse_ipv4(const char* text, uint32_t& out);
 }

@@ -63,6 +63,12 @@ private:
         // APPID in the UDP source port — see RGooseTrafficGen::AmendPacket.
         *(uint16_t *)(packet + RFrame::OFF_UDP_SRC_PORT) = RTE_STATIC_BSWAP16(appid);
 
+        // Destination spread — see RGooseTrafficGen::AmendPacket.
+        const RFrame::DstFields &dst = m_dst[desc.idx & (RFrame::R_DST_SPREAD - 1)];
+        std::memcpy(packet + RFrame::OFF_ETH_DMAC, dst.dmac, sizeof(dst.dmac));
+        std::memcpy(packet + RFrame::OFF_IP_DST, &dst.dstIP_be, 4);
+        *(uint16_t *)(packet + RFrame::OFF_IP_CSUM) = dst.ipCsum_be;
+
         ++ied.spduNumber;
         *(uint32_t *)(packet + m_spduOffset) = RTE_STATIC_BSWAP32(ied.spduNumber);
 
@@ -104,6 +110,8 @@ private:
     uint16_t    m_spduOffset = 0;       // Ethernet-relative SPDU number field
 
     std::vector< uint8_t >  m_plain;    // plaintext master of the encrypted region
+
+    RFrame::DstFields m_dst[RFrame::R_DST_SPREAD] = {};
 
     uint8_t     m_skeleton[MAX_SV_PACKET_SIZE] = { 0 };
     size_t      m_skeletonSize = 0;

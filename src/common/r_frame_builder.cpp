@@ -66,6 +66,23 @@ size_t build_prefix(uint8_t* buf, const RFrameConfig& cfg, size_t udpPayloadSize
     return OFF_UDP_PAYLOAD;
 }
 
+void make_dst_fields(const uint8_t* skeleton, uint32_t dstIP, DstFields& out)
+{
+    std::memcpy(out.dmac, multicast_mac(dstIP).data(), 6);
+
+    uint8_t ip[20];
+    std::memcpy(ip, skeleton + OFF_IP, sizeof(ip));
+    put_u32(ip + 16, dstIP);
+    put_u16(ip + 10, 0);
+
+    const uint16_t csum = ipv4_checksum(ip);
+    uint8_t be[4];
+    put_u32(be, dstIP);
+    std::memcpy(&out.dstIP_be, be, 4);
+    put_u16(be, csum);
+    std::memcpy(&out.ipCsum_be, be, 2);
+}
+
 bool parse_ipv4(const char* text, uint32_t& out)
 {
     unsigned b[4] = {};

@@ -55,6 +55,10 @@ void RSVTrafficGen::MakeSkeletonPacket(SVTrafficGen &l2, const RFrameConfig &cfg
 
     RFrame::build_prefix(m_skeleton, cfg, udpPayloadSize);
 
+    for (unsigned i=0;i<RFrame::R_DST_SPREAD;++i) {
+        RFrame::make_dst_fields(m_skeleton, RFrame::stream_dst_ip(cfg.dstIP, i), m_dst[i]);
+    }
+
     RSess::BuildParams params;
     params.si          = RSess::SI_R_SV;
     params.payloadType = RSess::PAYLOAD_TYPE_SV;

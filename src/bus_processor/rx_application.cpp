@@ -345,16 +345,23 @@ void RX_Application::Init(int argc, char* argv[])
     }
 
     /*
-     * Same passport as L2 except the MAC, which is the RFC 1112 mapping of
-     * --dst-ip. L2 and R share the APPID containers.
+     * Same passport as L2 except the MAC, which is the RFC 1112 mapping of the
+     * group the stream publishes to. L2 and R share the APPID containers.
      */
-    const MAC rMAC = RFrame::multicast_mac(m_rDstIP);
+    const auto rMAC = [this](unsigned idx) {
+        return RFrame::multicast_mac(RFrame::stream_dst_ip(m_rDstIP, idx));
+    };
 
     if (m_confRGooseNum > 0 || m_confRSV80Num > 0 || m_confRSV256Num > 0) {
-        std::cout << std::format("\n\tRoutable streams: group {}.{}.{}.{} -> {}, security {}\n\n",
+        unsigned groups = m_confRGooseNum > m_confRSV80Num ? m_confRGooseNum : m_confRSV80Num;
+        groups = groups > m_confRSV256Num ? groups : m_confRSV256Num;
+        groups = groups > RFrame::R_DST_SPREAD ? RFrame::R_DST_SPREAD : groups;
+
+        std::cout << std::format("\n\tRoutable streams: {} group(s) from {}.{}.{}.{}, security {}\n\n",
+                                 groups,
                                  (m_rDstIP >> 24) & 0xFF, (m_rDstIP >> 16) & 0xFF,
                                  (m_rDstIP >> 8) & 0xFF, m_rDstIP & 0xFF,
-                                 rMAC.toString(), RSess::to_string(m_rMode));
+                                 RSess::to_string(m_rMode));
     }
 
     if (m_confRGooseNum > 0) {
@@ -363,7 +370,7 @@ void RX_Application::Init(int argc, char* argv[])
 
         for (unsigned i=0;i<m_confRGooseNum;++i) {
             GooseSource::ptr src = std::make_shared< GooseSource >();
-            src->SetMAC(rMAC)
+            src->SetMAC(rMAC(i))
                 .SetAppID(0x0001 + i)
                 .SetGOID(std::format("GOID{:08}", i + 1))
                 .SetDataSetRef(std::format("IED{:08}LDName/LLN0$DataSet", i + 1))
@@ -381,7 +388,7 @@ void RX_Application::Init(int argc, char* argv[])
 
         for (unsigned i=0;i<m_confRSV80Num;++i) {
             SVStreamSource::ptr src = std::make_shared< SVStreamSource >();
-            src->SetMAC(rMAC)
+            src->SetMAC(rMAC(i))
                 .SetAppID(0x0001 + i)
                 .SetSVID(std::format("SVID{:04}", i + 1))
                 .SetCRev(1)
@@ -397,7 +404,7 @@ void RX_Application::Init(int argc, char* argv[])
 
         for (unsigned i=0;i<m_confRSV256Num;++i) {
             SVStreamSource::ptr src = std::make_shared< SVStreamSource >();
-            src->SetMAC(rMAC)
+            src->SetMAC(rMAC(i))
                 .SetAppID(0x0001 + i)
                 .SetSVID(std::format("SVID{:04}", i + 1))
                 .SetCRev(1)
