@@ -16,7 +16,7 @@ public:
     using TxSVUnit = TxUnit< SVPacketDesc >;
     using TxUnitArray = std::vector< TxSVUnit >;
 
-    RSVTrafficGen(unsigned num, SV_TYPE type, const RFrameConfig &cfg);
+    RSVTrafficGen(unsigned num, SV_TYPE type, const RFrameConfig &cfg, unsigned baseIdx = 0);
 
     template< RSess::SecurityMode MODE >
     inline size_t AmendPacketSV80(uint8_t *packet, const SVPacketDesc &desc)
@@ -58,13 +58,14 @@ private:
     template< RSess::SecurityMode MODE >
     inline uint8_t* PrepareFrame(uint8_t *packet, const SVPacketDesc &desc, SVSourceIED &ied)
     {
-        const uint16_t appid = static_cast< uint16_t >((desc.idx + 1) & 0xFFFF);
+        const unsigned stream = desc.idx + m_baseIdx;
+        const uint16_t appid = static_cast< uint16_t >((stream + 1) & 0xFFFF);
 
         // APPID in the UDP source port — see RGooseTrafficGen::AmendPacket.
         *(uint16_t *)(packet + RFrame::OFF_UDP_SRC_PORT) = RTE_STATIC_BSWAP16(appid);
 
         // Destination spread — see RGooseTrafficGen::AmendPacket.
-        const RFrame::DstFields &dst = m_dst[desc.idx & (RFrame::R_DST_SPREAD - 1)];
+        const RFrame::DstFields &dst = m_dst[stream & (RFrame::R_DST_SPREAD - 1)];
         std::memcpy(packet + RFrame::OFF_ETH_DMAC, dst.dmac, sizeof(dst.dmac));
         std::memcpy(packet + RFrame::OFF_IP_DST, &dst.dstIP_be, 4);
         *(uint16_t *)(packet + RFrame::OFF_IP_CSUM) = dst.ipCsum_be;
@@ -101,6 +102,8 @@ private:
     std::vector< SVSourceIED >  m_ieds;
     RSVTrafficGen::TxUnitArray  m_units;
     RSess::Crypto            m_crypto;
+
+    unsigned    m_baseIdx = 0;          // global index of this worker's first IED
 
     // Offsets relative to the start of the payload header (the AES-GCM region).
     uint16_t    m_appidOffset = 0;

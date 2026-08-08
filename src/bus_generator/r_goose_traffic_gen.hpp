@@ -21,19 +21,20 @@ public:
     using TxUnitArray = std::vector< TxGooseUnit >;
 
     RGooseTrafficGen(unsigned MaxGooseNum, unsigned SndFreq, unsigned SignalsPerGoose,
-                     const RFrameConfig &cfg);
+                     const RFrameConfig &cfg, unsigned baseIdx = 0);
 
     template< RSess::SecurityMode MODE >
     inline size_t AmendPacket(uint8_t *packet, const GoosePacketDesc &desc)
     {
         GooseSourceIED &ied = m_ieds[desc.idx];
-        const uint16_t appid = static_cast< uint16_t >((desc.idx + 1) & 0xFFFF);
+        const unsigned stream = desc.idx + m_baseIdx;
+        const uint16_t appid = static_cast< uint16_t >((stream + 1) & 0xFFFF);
 
         // APPID in the UDP source port: the only one visible under AES-GCM.
         *(uint16_t *)(packet + RFrame::OFF_UDP_SRC_PORT) = RTE_STATIC_BSWAP16(appid);
 
         // Destination group of the stream, so a hashing NIC can split them.
-        const RFrame::DstFields &dst = m_dst[desc.idx & (RFrame::R_DST_SPREAD - 1)];
+        const RFrame::DstFields &dst = m_dst[stream & (RFrame::R_DST_SPREAD - 1)];
         std::memcpy(packet + RFrame::OFF_ETH_DMAC, dst.dmac, sizeof(dst.dmac));
         std::memcpy(packet + RFrame::OFF_IP_DST, &dst.dstIP_be, 4);
         *(uint16_t *)(packet + RFrame::OFF_IP_CSUM) = dst.ipCsum_be;
@@ -86,6 +87,7 @@ private:
     RGooseTrafficGen::TxUnitArray   m_units;
     RSess::Crypto                m_crypto;
 
+    unsigned    m_baseIdx = 0;          // global index of this worker's first IED
     unsigned    m_tsDeltaChange = 0;
 
     // Payload-header relative, indexed by GOOSE_PARAM_OFFSETS.

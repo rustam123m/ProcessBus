@@ -19,6 +19,16 @@
 
 #include "cxxopts.hpp"
 
+#include <rte_launch.h>
+#include <rte_lcore.h>
+
+#include <pthread.h>
+
+#include <algorithm>
+#include <functional>
+#include <memory>
+#include <utility>
+
 const unsigned BURST_SIZE = 32;
 
 template< typename TxUnitArray >
@@ -130,29 +140,187 @@ static void tx_packets_cycle(TxCycleConfig &conf, GenAppStat &stat, GenClass &ge
 
 
 /*
- * Security mode is a template parameter so the non-secure path keeps the L2
- * field writes and the hot loop stays branch-free.
+ * One shared start tick for every TX worker: rte_eal_remote_launch staggers
+ * thread start, so without this each queue would pace off its own clock read
+ * and the per-second pulses would drift apart.
  */
+struct RTxControl
+{
+    pthread_barrier_t barrier;
+    uint64_t          startTick = 0;
+};
+
+struct RTxWorkerCtx
+{
+    std::function< void() > run;
+};
+
+static int r_tx_trampoline(void *arg)
+{
+    reinterpret_cast< RTxWorkerCtx* >(arg)->run();
+    return 0;
+}
+
+// IED half-open slice [lo, hi) owned by worker @p i; remainder to the first workers.
+static std::pair< unsigned, unsigned > ied_slice(unsigned num, unsigned workers, unsigned i)
+{
+    const unsigned per = num / workers, rem = num % workers;
+    const unsigned lo = i * per + (i < rem ? i : rem);
+    const unsigned hi = lo + per + (i < rem ? 1u : 0u);
+    return { lo, hi };
+}
+
+template<
+    typename GenClass,
+    size_t (GenClass::*Amend)(uint8_t *packet, const typename GenClass::Desc &desc)
+>
+static void tx_r_worker_cycle(rte_mempool *pool, uint16_t portID, uint16_t queueID,
+                              GenClass &gen, GenAppStat &stat,
+                              RTxControl &ctrl, StopVarType &doWork)
+{
+    typename GenClass::TxUnitArray &txUnits = gen.GetTxUnits();
+    set_thread_priority(DEF_GENERATOR_PRIORITY);
+
+    rte_mbuf* mbufs[BURST_SIZE] = { nullptr };
+    unsigned txUnitIdx = 0;
+
+    // Synchronized start: the serial thread reads the tick, the rest take its copy.
+    int rc = pthread_barrier_wait(&ctrl.barrier);
+    if (rc == PTHREAD_BARRIER_SERIAL_THREAD) {
+        ctrl.startTick = DPDK::Clocks::get_current_ticks();
+    }
+    pthread_barrier_wait(&ctrl.barrier);
+    uint64_t secStartTick = ctrl.startTick;
+
+    stat.procStat.MarkStartCycling();
+    while (doWork) {
+        stat.procStat.MarkProcBegin();
+        for (const auto &blk : txUnits[txUnitIdx].blocks) {
+            unsigned count = blk.packets.size(), sendNum = 0;
+            while (sendNum < count) {
+                unsigned num = ((count - sendNum) >= BURST_SIZE) ? BURST_SIZE
+                                                                 : (count - sendNum);
+                if (rte_pktmbuf_alloc_bulk(pool, mbufs, num) == 0) {
+                    for (size_t i=0;i<num;++i) {
+                        uint8_t *packet = rte_pktmbuf_mtod(mbufs[i], uint8_t *);
+
+                        mbufs[i]->pkt_len = (gen.*Amend)(packet, blk.packets[sendNum + i]);
+                        mbufs[i]->data_len = mbufs[i]->pkt_len;
+                    }
+
+                    uint16_t nb_tx = rte_eth_tx_burst(portID, queueID, mbufs, num);
+                    stat.txPktCnt += nb_tx;
+                    if (nb_tx < num) {
+                        for (uint16_t i=nb_tx;i<num;i++) {
+                            rte_pktmbuf_free(mbufs[i]);
+                        }
+                        stat.errSendCnt += num - nb_tx;
+                    }
+                } else {
+                    rte_eth_tx_done_cleanup(portID, queueID, 0);
+                    if (!doWork) break;
+                    continue;
+                }
+
+                sendNum += num;
+            }
+        }
+        stat.procStat.MarkProcEnd();
+
+        txUnitIdx = (txUnitIdx + 1) % txUnits.size();
+        if (txUnitIdx == 0) {
+            secStartTick = DPDK::Clocks::delay_until_ticks(
+                               secStartTick + DPDK::Clocks::get_ticks_per_sec()
+                           );
+        } else {
+            DPDK::Clocks::delay_until_ticks(
+                secStartTick + DPDK::Clocks::delay_us_to_ticks(txUnits[txUnitIdx].offsetUS)
+            );
+        }
+    }
+    stat.procStat.MarkFinishCycling();
+}
+
+template<
+    typename GenClass,
+    size_t (GenClass::*Amend)(uint8_t *packet, const typename GenClass::Desc &desc)
+>
+static void run_r_workers(rte_mempool *pool, uint16_t portID,
+                          std::vector< std::unique_ptr< GenClass > > &gens,
+                          std::vector< GenAppStat > &stats, StopVarType &doWork)
+{
+    const unsigned workers = gens.size();
+
+    RTxControl ctrl;
+    pthread_barrier_init(&ctrl.barrier, nullptr, workers);
+
+    std::vector< RTxWorkerCtx > ctx(workers);
+
+    // Workers 1..N-1 run one queue each on the DPDK worker lcores; index 0 is inline.
+    unsigned idx = 1, lcore = 0;
+    RTE_LCORE_FOREACH_WORKER(lcore) {
+        if (idx >= workers) {
+            break;
+        }
+        const unsigned w = idx;
+        ctx[w].run = [=, &gens, &stats, &ctrl, &doWork]() {
+            tx_r_worker_cycle< GenClass, Amend >(pool, portID, (uint16_t)w,
+                                                 *gens[w], stats[w], ctrl, doWork);
+        };
+        rte_eal_remote_launch(r_tx_trampoline, &ctx[w], lcore);
+        ++idx;
+    }
+
+    std::cout << "\n\tStart main loop with TX workers: " << workers << std::endl;
+    tx_r_worker_cycle< GenClass, Amend >(pool, portID, 0, *gens[0], stats[0], ctrl, doWork);
+
+    rte_eal_mp_wait_lcore();
+    pthread_barrier_destroy(&ctrl.barrier);
+
+    DPDK::Info::display_eth_stats(portID);
+}
+
 template<
     typename GenClass,
     size_t (GenClass::*AmendNone)(uint8_t *, const typename GenClass::Desc &),
     size_t (GenClass::*AmendHmac)(uint8_t *, const typename GenClass::Desc &),
     size_t (GenClass::*AmendGcm)(uint8_t *, const typename GenClass::Desc &)
 >
-static void tx_r_packets_cycle(TxCycleConfig &conf, GenAppStat &stat, GenClass &gen,
-                               RSess::SecurityMode mode, StopVarType &doWork)
+static void tx_r_packets_cycle_mt(rte_mempool *pool, uint16_t portID,
+                                  std::vector< std::unique_ptr< GenClass > > &gens,
+                                  std::vector< GenAppStat > &stats,
+                                  RSess::SecurityMode mode, StopVarType &doWork)
 {
     switch (mode) {
     case RSess::SEC_NONE:
-        tx_packets_cycle< GenClass, AmendNone >(conf, stat, gen, doWork);
+        run_r_workers< GenClass, AmendNone >(pool, portID, gens, stats, doWork);
         break;
     case RSess::SEC_HMAC:
-        tx_packets_cycle< GenClass, AmendHmac >(conf, stat, gen, doWork);
+        run_r_workers< GenClass, AmendHmac >(pool, portID, gens, stats, doWork);
         break;
     case RSess::SEC_GCM:
-        tx_packets_cycle< GenClass, AmendGcm >(conf, stat, gen, doWork);
+        run_r_workers< GenClass, AmendGcm >(pool, portID, gens, stats, doWork);
         break;
     }
+}
+
+/*
+ * One generator per worker, each built over just its IED slice: own crypto and
+ * plaintext scratch (not thread-safe to share) and a slice-sized schedule, so
+ * there is nothing to discard. The factory takes (baseIdx, count); the generator
+ * folds baseIdx back into appid/sID so stream identity stays global.
+ */
+template< typename GenClass, typename Factory >
+static std::vector< std::unique_ptr< GenClass > >
+make_r_workers(unsigned workers, unsigned num, Factory factory)
+{
+    std::vector< std::unique_ptr< GenClass > > gens;
+    gens.reserve(workers);
+    for (unsigned i=0;i<workers;++i) {
+        auto [lo, hi] = ied_slice(num, workers, i);
+        gens.push_back(factory(lo, hi - lo));
+    }
+    return gens;
 }
 
 GenApplication::GenApplication(int argc, char *argv[])
@@ -240,6 +408,24 @@ GenApplication::GenApplication(int argc, char *argv[])
         std::cerr << "cxxopts: Error parsing options: " << e.what() << std::endl;
         throw;
     }
+
+    // R-messages get one TX worker per lcore (capped at the stream count); the
+    // L2 flags take priority in Run(), so an L2 request stays single-worker.
+    const bool l2 = (m_gooseNum > 0 || m_sv80Num > 0 || m_sv256Num > 0);
+    unsigned rNum = 0;
+    if (!l2) {
+        rNum = m_rgooseNum ? m_rgooseNum : (m_rsv80Num ? m_rsv80Num : m_rsv256Num);
+    }
+    if (rNum > 0) {
+        m_workerNum = std::min(rte_lcore_count(), rNum);
+    }
+    m_stats.resize(m_workerNum);
+}
+
+// "Main" for the inline worker, "LCoreN" for the launched ones.
+static std::string worker_label(size_t i)
+{
+    return (i == 0) ? "Main" : ("LCore" + std::to_string(i));
 }
 
 void GenApplication::DisplayStatistic(unsigned interval_sec)
@@ -251,6 +437,11 @@ void GenApplication::DisplayStatistic(unsigned interval_sec)
 
     uint64_t tx_pps = (m_lastPortStat.opackets - start.opackets) / interval_sec;
     uint64_t tx_bps = (m_lastPortStat.obytes - start.obytes) / interval_sec;
+
+    unsigned errSend = 0;
+    for (const auto &s : m_stats) {
+        errSend += s.errSendCnt;
+    }
 
     std::cout << std::format("\nTime {} sec\n\n", m_statDisplaySec);
 
@@ -266,32 +457,51 @@ void GenApplication::DisplayStatistic(unsigned interval_sec)
                         tx_pps,
                         m_lastPortStat.opackets,
                         m_lastPortStat.oerrors,
-                        m_stat.errSendCnt
+                        errSend
                  )
               << std::endl;
 
     Console::CyclicStat::PrintTableHeader();
-    Console::CyclicStat::PrintTableRow("Main", m_stat.procStat) << "\n";
+    for (size_t i=0;i<m_stats.size();++i) {
+        Console::CyclicStat::PrintTableRow(worker_label(i), m_stats[i].procStat) << "\n";
+    }
 }
 
 void GenApplication::DisplayResults()
 {
-    Console::CyclicStat::PrintTableHeader({"TxRingFull"});
-    Console::CyclicStat::PrintTableRow("Main", m_stat.procStat)
-                      << std::format(" {:<10} |\n", m_stat.errSendCnt);
+    unsigned errSend = 0;
+    uint64_t txPkt = 0;
+    size_t   busiest = 0;
+    for (size_t i=0;i<m_stats.size();++i) {
+        errSend += m_stats[i].errSendCnt;
+        txPkt   += m_stats[i].txPktCnt;
+        if (m_stats[i].procStat.GetLoadPerc() > m_stats[busiest].procStat.GetLoadPerc()) {
+            busiest = i;
+        }
+    }
 
-    // err_send is the TX-ring-full count: a run with any is not a valid data point.
+    Console::CyclicStat::PrintTableHeader({"TxRingFull"});
+    for (size_t i=0;i<m_stats.size();++i) {
+        Console::CyclicStat::PrintTableRow(worker_label(i), m_stats[i].procStat)
+                          << std::format(" {:<10} |\n", m_stats[i].errSendCnt);
+    }
+
+    /*
+     * err_send is the TX-ring-full count: a run with any is not a valid data
+     * point. load/min/max report the busiest worker, i.e. the per-core ceiling.
+     */
+    DPDK::CyclicStat &top = m_stats[busiest].procStat;
     std::cout << std::format(
                      "\nSUMMARY_GEN\n"
                      "\tSent          \ttx_packets={}\n"
                      "\tTX ring full  \terr_send={}\n"
-                     "\tMain loop     \tload_pct={:.3f}\tmin_us={}\tmax_us={}\n"
+                     "\tBusiest loop  \tload_pct={:.3f}\tmin_us={}\tmax_us={}\n"
                      "END_SUMMARY_GEN\n",
-                     m_stat.txPktCnt,
-                     m_stat.errSendCnt,
-                     m_stat.procStat.GetLoadPerc(),
-                     m_stat.procStat.GetMinProcUS(),
-                     m_stat.procStat.GetMaxProcUS())
+                     txPkt,
+                     errSend,
+                     top.GetLoadPerc(),
+                     top.GetMinProcUS(),
+                     top.GetMaxProcUS())
               << std::endl;
 }
 
@@ -320,10 +530,28 @@ void GenApplication::Run(StopVarType &doWork)
     const int descSocketID = -1; // -1 → keep PortBuilder default (rte_socket_id)
 #endif
 
-    uint16_t nicPortID = 0, nicQueueID = 0;
+    // R-messages fan out across m_workerNum TX queues; L2 stays single-queue.
+    const bool l2 = (m_gooseNum > 0 || m_sv80Num > 0 || m_sv256Num > 0);
+    const bool isR = !l2 && (m_rgooseNum > 0 || m_rsv80Num > 0 || m_rsv256Num > 0);
+    const uint16_t txQueues = isR ? static_cast< uint16_t >(m_workerNum) : 1;
+
+    if (isR) {
+        // One TX ring plus a burst per worker must fit the pool (OPi3B binds first).
+        const uint64_t need = static_cast< uint64_t >(txQueues) * TX_DESC_NUM
+                            + static_cast< uint64_t >(txQueues) * CACHE_NUM + BURST_SIZE;
+        if (need >= MBUF_NUM) {
+            throw std::runtime_error("Too many TX cores (" + std::to_string(txQueues)
+                + ") for the mempool: need " + std::to_string(need) + " mbufs, have "
+                + std::to_string(MBUF_NUM) + " — use fewer lcores");
+        }
+    } else if (rte_lcore_count() > 1) {
+        std::cout << "L2 GOOSE/SV generation is single-core; extra lcores stay idle.\n";
+    }
+
+    uint16_t nicPortID = 0;
     DPDK::Port port = DPDK::PortBuilder(nicPortID)
                             .SetMemPool(pool.GetPtr())
-                            .AdjustQueues(1, 1)
+                            .AdjustQueues(1, txQueues)
                             .SetDescriptors(RX_DESC_NUM, TX_DESC_NUM)
                             .SetDescriptorSocketId(descSocketID)
                             .Build();
@@ -336,7 +564,7 @@ void GenApplication::Run(StopVarType &doWork)
     // Link info
     std::cout << port << "\n";
 
-    TxCycleConfig conf { .pool=pool.GetPtr(), .nicPortID=port.GetID(), .nicQueueID=nicQueueID };
+    TxCycleConfig conf { .pool=pool.GetPtr(), .nicPortID=port.GetID(), .nicQueueID=0 };
 
     // Main cycle
     if (m_gooseNum > 0) {
@@ -347,7 +575,7 @@ void GenApplication::Run(StopVarType &doWork)
                         .FillPackets(pool.GetPtr());
 
         // Generate cycle with GOOSE packets
-        tx_packets_cycle< GooseTrafficGen >(conf, m_stat, gen, doWork);
+        tx_packets_cycle< GooseTrafficGen >(conf, m_stats[0], gen, doWork);
     } else if (m_sv80Num > 0) {
         // SV 80 points
         SVTrafficGen gen(m_sv80Num, SV_TYPE::SV80);
@@ -356,7 +584,7 @@ void GenApplication::Run(StopVarType &doWork)
                         .FillPackets(pool.GetPtr());
 
         // Generate cycle with SV packets
-        tx_packets_cycle< SVTrafficGen, &SVTrafficGen::AmendPacketSV80 >(conf, m_stat, gen, doWork);
+        tx_packets_cycle< SVTrafficGen, &SVTrafficGen::AmendPacketSV80 >(conf, m_stats[0], gen, doWork);
     } else if (m_sv256Num > 0) {
         // SV 256 points
         SVTrafficGen gen(m_sv256Num, SV_TYPE::SV256);
@@ -365,43 +593,49 @@ void GenApplication::Run(StopVarType &doWork)
                         .FillPackets(pool.GetPtr());
 
         // Generate cycle with SV packets
-        tx_packets_cycle< SVTrafficGen, &SVTrafficGen::AmendPacketSV256 >(conf, m_stat, gen, doWork);
+        tx_packets_cycle< SVTrafficGen, &SVTrafficGen::AmendPacketSV256 >(conf, m_stats[0], gen, doWork);
     } else if (m_rgooseNum > 0) {
         // R-GOOSE (IEC 61850-90-5)
-        RGooseTrafficGen gen(m_rgooseNum, m_rgooseSendFreq, m_gooseEntries, m_rframe);
+        auto gens = make_r_workers< RGooseTrafficGen >(m_workerNum, m_rgooseNum,
+            [&](unsigned lo, unsigned count){ return std::make_unique< RGooseTrafficGen >(
+                     count, m_rgooseSendFreq, m_gooseEntries, m_rframe, lo); });
 
-        DPDK::PoolSetter(gen.GetSkeletonBuffer(), gen.GetSkeletonSize())
+        DPDK::PoolSetter(gens[0]->GetSkeletonBuffer(), gens[0]->GetSkeletonSize())
                         .FillPackets(pool.GetPtr());
 
-        tx_r_packets_cycle< RGooseTrafficGen,
-                            &RGooseTrafficGen::AmendPacket< RSess::SEC_NONE >,
-                            &RGooseTrafficGen::AmendPacket< RSess::SEC_HMAC >,
-                            &RGooseTrafficGen::AmendPacket< RSess::SEC_GCM > >(
-            conf, m_stat, gen, m_rframe.mode, doWork);
+        tx_r_packets_cycle_mt< RGooseTrafficGen,
+                               &RGooseTrafficGen::AmendPacket< RSess::SEC_NONE >,
+                               &RGooseTrafficGen::AmendPacket< RSess::SEC_HMAC >,
+                               &RGooseTrafficGen::AmendPacket< RSess::SEC_GCM > >(
+            pool.GetPtr(), port.GetID(), gens, m_stats, m_rframe.mode, doWork);
     } else if (m_rsv80Num > 0) {
         // R-SV 80 points
-        RSVTrafficGen gen(m_rsv80Num, SV_TYPE::SV80, m_rframe);
+        auto gens = make_r_workers< RSVTrafficGen >(m_workerNum, m_rsv80Num,
+            [&](unsigned lo, unsigned count){ return std::make_unique< RSVTrafficGen >(
+                     count, SV_TYPE::SV80, m_rframe, lo); });
 
-        DPDK::PoolSetter(gen.GetSkeletonBuffer(), gen.GetSkeletonSize())
+        DPDK::PoolSetter(gens[0]->GetSkeletonBuffer(), gens[0]->GetSkeletonSize())
                         .FillPackets(pool.GetPtr());
 
-        tx_r_packets_cycle< RSVTrafficGen,
-                            &RSVTrafficGen::AmendPacketSV80< RSess::SEC_NONE >,
-                            &RSVTrafficGen::AmendPacketSV80< RSess::SEC_HMAC >,
-                            &RSVTrafficGen::AmendPacketSV80< RSess::SEC_GCM > >(
-            conf, m_stat, gen, m_rframe.mode, doWork);
+        tx_r_packets_cycle_mt< RSVTrafficGen,
+                               &RSVTrafficGen::AmendPacketSV80< RSess::SEC_NONE >,
+                               &RSVTrafficGen::AmendPacketSV80< RSess::SEC_HMAC >,
+                               &RSVTrafficGen::AmendPacketSV80< RSess::SEC_GCM > >(
+            pool.GetPtr(), port.GetID(), gens, m_stats, m_rframe.mode, doWork);
     } else if (m_rsv256Num > 0) {
         // R-SV 256 points
-        RSVTrafficGen gen(m_rsv256Num, SV_TYPE::SV256, m_rframe);
+        auto gens = make_r_workers< RSVTrafficGen >(m_workerNum, m_rsv256Num,
+            [&](unsigned lo, unsigned count){ return std::make_unique< RSVTrafficGen >(
+                     count, SV_TYPE::SV256, m_rframe, lo); });
 
-        DPDK::PoolSetter(gen.GetSkeletonBuffer(), gen.GetSkeletonSize())
+        DPDK::PoolSetter(gens[0]->GetSkeletonBuffer(), gens[0]->GetSkeletonSize())
                         .FillPackets(pool.GetPtr());
 
-        tx_r_packets_cycle< RSVTrafficGen,
-                            &RSVTrafficGen::AmendPacketSV256< RSess::SEC_NONE >,
-                            &RSVTrafficGen::AmendPacketSV256< RSess::SEC_HMAC >,
-                            &RSVTrafficGen::AmendPacketSV256< RSess::SEC_GCM > >(
-            conf, m_stat, gen, m_rframe.mode, doWork);
+        tx_r_packets_cycle_mt< RSVTrafficGen,
+                               &RSVTrafficGen::AmendPacketSV256< RSess::SEC_NONE >,
+                               &RSVTrafficGen::AmendPacketSV256< RSess::SEC_HMAC >,
+                               &RSVTrafficGen::AmendPacketSV256< RSess::SEC_GCM > >(
+            pool.GetPtr(), port.GetID(), gens, m_stats, m_rframe.mode, doWork);
     } else {
         std::cerr << "You have to specify GOOSE, SV, R-GOOSE or R-SV to generate!\n";
     }

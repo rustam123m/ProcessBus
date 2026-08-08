@@ -12,8 +12,9 @@ namespace
 }
 
 RGooseTrafficGen::RGooseTrafficGen(unsigned MaxGooseNum, unsigned SndFreq,
-                                   unsigned SignalsPerGoose, const RFrameConfig &cfg)
-    : m_ieds(MaxGooseNum)
+                                   unsigned SignalsPerGoose, const RFrameConfig &cfg,
+                                   unsigned baseIdx)
+    : m_ieds(MaxGooseNum), m_baseIdx(baseIdx)
 {
     if (!m_crypto.IsReady()) {
         throw std::runtime_error("Failed to initialise mbedtls contexts for R-GOOSE");
@@ -22,7 +23,8 @@ RGooseTrafficGen::RGooseTrafficGen(unsigned MaxGooseNum, unsigned SndFreq,
     GooseTrafficGen l2(MaxGooseNum, SndFreq, SignalsPerGoose);
 
     for (size_t i=0;i<m_ieds.size();++i) {
-        snprintf(m_ieds[i].sID, sizeof(m_ieds[i].sID), "%08" PRIu64 "", (uint64_t)(i + 1));
+        snprintf(m_ieds[i].sID, sizeof(m_ieds[i].sID), "%08" PRIu64 "",
+                 (uint64_t)(m_baseIdx + i + 1));
     }
 
     MakeSkeletonPacket(l2, cfg);

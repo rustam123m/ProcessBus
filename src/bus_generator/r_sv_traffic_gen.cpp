@@ -11,8 +11,9 @@ namespace
     }
 }
 
-RSVTrafficGen::RSVTrafficGen(unsigned num, SV_TYPE type, const RFrameConfig &cfg)
-    : m_ieds(num)
+RSVTrafficGen::RSVTrafficGen(unsigned num, SV_TYPE type, const RFrameConfig &cfg,
+                             unsigned baseIdx)
+    : m_ieds(num), m_baseIdx(baseIdx)
 {
     if (!m_crypto.IsReady()) {
         throw std::runtime_error("Failed to initialise mbedtls contexts for R-SV");
@@ -22,7 +23,7 @@ RSVTrafficGen::RSVTrafficGen(unsigned num, SV_TYPE type, const RFrameConfig &cfg
     SVTrafficGen l2(num, type);
 
     for (size_t i=0;i<m_ieds.size();++i) {
-        snprintf(m_ieds[i].sID, sizeof(m_ieds[i].sID), "%04u", (unsigned)(i + 1));
+        snprintf(m_ieds[i].sID, sizeof(m_ieds[i].sID), "%04u", (unsigned)(m_baseIdx + i + 1));
     }
     m_freq = l2.GetSmpCntFreq();
 

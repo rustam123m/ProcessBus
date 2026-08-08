@@ -6,6 +6,9 @@
 #include "dpdk_cpp/dpdk_cyclestat_class.hpp"
 #include "dpdk_cpp/dpdk_port_class.hpp"
 
+#include <memory>
+#include <vector>
+
 using StopVarType = volatile bool;
 
 struct GenAppStat
@@ -50,8 +53,11 @@ private:
 
     RFrameConfig m_rframe;
 
+    // One TX worker per lcore for R-messages; a single entry for L2.
+    unsigned      m_workerNum = 1;
+
     // Statistics
-    GenAppStat    m_stat;
+    std::vector< GenAppStat > m_stats;
     rte_eth_stats m_lastPortStat = {};
     unsigned      m_statDisplaySec = 0;
     unsigned      m_runTimeSec = 0;

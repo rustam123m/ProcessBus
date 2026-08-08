@@ -251,6 +251,13 @@ namespace DPDK
                 throw std::runtime_error("Can't get dev info for: " + std::to_string(m_portID));
             }
 
+            if (m_txQueueNum > devInfo.max_tx_queues || m_rxQueueNum > devInfo.max_rx_queues) {
+                throw std::runtime_error("Requested queues exceed NIC limit (tx "
+                    + std::to_string(m_txQueueNum) + "/" + std::to_string(devInfo.max_tx_queues)
+                    + ", rx " + std::to_string(m_rxQueueNum) + "/"
+                    + std::to_string(devInfo.max_rx_queues) + ")");
+            }
+
             if (m_timestamping) {
                 if (devInfo.rx_offload_capa & RTE_ETH_RX_OFFLOAD_TIMESTAMP) {
                     m_ethConf.rxmode.offloads |= RTE_ETH_RX_OFFLOAD_TIMESTAMP;
