@@ -60,6 +60,7 @@ sv_smp_err=$(summary_field "$PROC_LOG" sv_err_smp)
 goose_spdu_err=$(summary_field "$PROC_LOG" goose_err_spdu)
 sv_spdu_err=$(summary_field "$PROC_LOG" sv_err_spdu)
 
+proc_ring_full=$(summary_field "$PROC_LOG" ring_full)
 proc_rx_packets=$(summary_field "$PROC_LOG" rx_packets)
 proc_imissed=$(summary_field "$PROC_LOG" imissed)
 proc_ierrors=$(summary_field "$PROC_LOG" ierrors)
@@ -104,6 +105,7 @@ add_fail() {
 [ "${proc_auth_fail:-0}" -gt 0 ] && add_fail "auth_fail=$proc_auth_fail"
 [ "${proc_goose_err:-0}" -gt 0 ] && add_fail "goose_parse_err=$proc_goose_err"
 [ "${proc_sv_err:-0}" -gt 0 ]    && add_fail "sv_parse_err=$proc_sv_err"
+[ "${proc_ring_full:-0}" -gt 0 ] && add_fail "ring_full=$proc_ring_full"
 [ "${proc_imissed:-0}" -gt 0 ]   && add_fail "imissed=$proc_imissed"
 [ "${proc_ierrors:-0}" -gt 0 ]   && add_fail "ierrors=$proc_ierrors"
 [ "${proc_nombuf:-0}" -gt 0 ]    && add_fail "rx_nombuf=$proc_nombuf"
@@ -141,6 +143,7 @@ cat <<EOF
     "goose_unknown": $proc_goose_unknown,
     "sv_unknown": $proc_sv_unknown,
     "auth_fail": $proc_auth_fail,
+    "ring_full": ${proc_ring_full:-0},
     "imissed": $proc_imissed,
     "ierrors": $proc_ierrors,
     "rx_nombuf": $proc_nombuf,

@@ -186,10 +186,17 @@ namespace
                 }
                 for (unsigned i=0;i<workerNum;++i) {
                     if (workerQueue[i].num > 0) {
-                        rte_ring_sp_enqueue_burst(lcoreWorker[i].m_ring,
-                                                  (void * const *)workerQueue[i].buff,
-                                                  workerQueue[i].num,
-                                                  nullptr);
+                        const unsigned queued =
+                            rte_ring_sp_enqueue_burst(lcoreWorker[i].m_ring,
+                                                      (void * const *)workerQueue[i].buff,
+                                                      workerQueue[i].num,
+                                                      nullptr);
+                        // Unqueued mbufs must be freed here.
+                        if (queued < workerQueue[i].num) {
+                            const unsigned lost = workerQueue[i].num - queued;
+                            rte_pktmbuf_free_bulk(workerQueue[i].buff + queued, lost);
+                            app.m_errRingFullCnt += lost;
+                        }
                         workerQueue[i].num = 0;
                     }
                 }
@@ -526,6 +533,7 @@ void RX_Application::DisplayResults()
                      "\tSecurity      \tauth_fail={}\n"
                      "\tStream gaps   \tgoose_err_seq={}\tsv_err_smp={}\n"
                      "\tSPDU gaps     \tgoose_err_spdu={}\tsv_err_spdu={}\n"
+                     "\tWorker ring   \tring_full={}\n"
                      "\tNIC counters  \trx_packets={}\timissed={}\tierrors={}\n"
                      "\t              \trx_nombuf={}\tq_errors={}\n"
                      "END_SUMMARY_PROC\n",
@@ -535,6 +543,7 @@ void RX_Application::DisplayResults()
                      m_errAuthCnt,
                      gooseErrSeq, svErrSeq,
                      gooseErrSpdu, svErrSpdu,
+                     m_errRingFullCnt,
                      m_lastPortStat.ipackets, m_lastPortStat.imissed,
                      m_lastPortStat.ierrors, m_lastPortStat.rx_nombuf,
                      m_lastPortStat.q_errors[0])

@@ -76,7 +76,9 @@ public:
                     m_errGooseParserCnt = 0, m_errSVParserCnt = 0,
                     m_rxUnknownGooseCnt = 0, m_rxUnknownSVCnt = 0,
                     m_errAuthCnt = 0,
-                    m_pktToKernelCnt = 0;
+                    m_pktToKernelCnt = 0,
+                    // Frames dropped because the worker ring was full.
+                    m_errRingFullCnt = 0;
     rte_eth_stats   m_lastPortStat = {};
     unsigned        m_statDisplaySec = 0;
     unsigned        m_runTimeSec = 0;
