@@ -1,5 +1,6 @@
 #include "process_bus_parser.hpp"
 
+#include <cstring>
 #include <iostream>
 
 namespace
@@ -316,6 +317,17 @@ namespace
                        RSess::SessionHeader &session, RSess::PayloadHeader &phdr,
                        const uint8_t *&apduBase)
     {
+#ifdef PLATFORM_ORANGEPI3B
+        // RK3566 has no PCIe cache coherency: in-place GCM decryption dirties
+        // the mbuf, and the write-back corrupts the next packet DMA'd into the
+        // recycled buffer. Decrypt a copy.
+        static thread_local uint8_t scratch[2048];
+        if (mode == RSess::SEC_GCM && size >= 0
+            && static_cast< size_t >(size) <= sizeof(scratch)) {
+            std::memcpy(scratch, buffer, static_cast< size_t >(size));
+            buffer = scratch;
+        }
+#endif
         /*
          * The frame may be padded to 60 bytes, so the IPv4 total length bounds
          * the session PDU, not the frame length.
