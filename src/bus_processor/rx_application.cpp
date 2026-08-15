@@ -69,6 +69,8 @@ namespace
         // Link info
         std::cout << eth << "\n";
 
+        app.MarkRunStarted();
+
         std::cout << "\n\tStart main loop" << std::endl;
         set_thread_priority(DEF_PROCESS_PRIORITY);
         ASM_MARKER(signle_core_processing);
@@ -145,6 +147,8 @@ namespace
 
         // Link info
         std::cout << eth << "\n";
+
+        app.MarkRunStarted();
 
         std::cout << "\n\tStart main loop with workers: " << workerNum << std::endl;
         set_thread_priority(DEF_PROCESS_PRIORITY);
@@ -435,7 +439,9 @@ void RX_Application::DisplayStatistic(unsigned interval_sec)
     rte_eth_stats start = m_lastPortStat;
     unsigned port_id = 0;
     rte_eth_stats_get(port_id, &m_lastPortStat);
-    m_statDisplaySec += interval_sec;
+    if (m_runStarted) {
+        m_statDisplaySec += interval_sec;
+    }
 
     // Calculate RX and TX PPS/BPS
     uint64_t rx_pps = (m_lastPortStat.ipackets - start.ipackets) / interval_sec;

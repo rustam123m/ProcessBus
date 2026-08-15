@@ -46,6 +46,9 @@ public:
         return m_runTimeSec > 0 && m_statDisplaySec >= m_runTimeSec;
     }
 
+    // EAL init and link wait are excluded from the --time limit.
+    void MarkRunStarted() { m_runStarted = true; }
+
     void Run(StopVarType &doWork);
 
 private:
@@ -82,5 +85,8 @@ public:
     rte_eth_stats   m_lastPortStat = {};
     unsigned        m_statDisplaySec = 0;
     unsigned        m_runTimeSec = 0;
+
+    // Written by the main thread, read by the statistics thread.
+    volatile bool   m_runStarted = false;
 };
 

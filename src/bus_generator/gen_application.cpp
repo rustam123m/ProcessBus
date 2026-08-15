@@ -433,7 +433,9 @@ void GenApplication::DisplayStatistic(unsigned interval_sec)
     rte_eth_stats start = m_lastPortStat;
     unsigned port_id = 0;
     rte_eth_stats_get(port_id, &m_lastPortStat);
-    m_statDisplaySec += interval_sec;
+    if (m_runStarted) {
+        m_statDisplaySec += interval_sec;
+    }
 
     uint64_t tx_pps = (m_lastPortStat.opackets - start.opackets) / interval_sec;
     uint64_t tx_bps = (m_lastPortStat.obytes - start.obytes) / interval_sec;
@@ -463,7 +465,7 @@ void GenApplication::DisplayStatistic(unsigned interval_sec)
 
     Console::CyclicStat::PrintTableHeader();
     for (size_t i=0;i<m_stats.size();++i) {
-        Console::CyclicStat::PrintTableRow(worker_label(i), m_stats[i].procStat) << "\n";
+        Console::CyclicStat::PrintSampleRow(worker_label(i), m_stats[i].procStat) << "\n";
     }
 }
 
@@ -563,6 +565,8 @@ void GenApplication::Run(StopVarType &doWork)
     }
     // Link info
     std::cout << port << "\n";
+
+    MarkRunStarted();
 
     TxCycleConfig conf { .pool=pool.GetPtr(), .nicPortID=port.GetID(), .nicQueueID=0 };
 
