@@ -12,6 +12,8 @@
 #include "cxxopts.hpp"
 #include "pipeline_pbus.hpp"
 
+#include <algorithm>
+
 // TODO: Remove g_doWork
 extern volatile bool g_doWork;
 
@@ -80,6 +82,7 @@ namespace
 
         // Main cycle
         DPDK::CyclicStat procStat;
+        app.RegisterCycleStat("Main", &procStat);
         procStat.MarkStartCycling();
         while (g_doWork) {
             uint16_t rxNum = rte_eth_rx_burst(eth.GetID(), queue_id,
@@ -166,6 +169,10 @@ namespace
 
         // Main cycle
         DPDK::CyclicStat procStat;
+        app.RegisterCycleStat("Main", &procStat);
+        for (auto &w : lcoreWorker) {
+            app.RegisterCycleStat("LCore" + std::to_string(w.m_lcore), &w.m_procStat);
+        }
         procStat.MarkStartCycling();
         rte_mbuf* bufs[RX_BURST_SIZE] = { nullptr };
         while (g_doWork) {
@@ -431,6 +438,18 @@ void RX_Application::Init(int argc, char* argv[])
     }
 }
 
+void RX_Application::CountGaps(uint64_t &goose, uint64_t &sv)
+{
+    goose = 0;
+    sv = 0;
+    for (const auto &src : m_gooseMap) {
+        goose += std::max(src.second->GetErrSeqNum(), src.second->GetErrSpduNum());
+    }
+    for (const auto &src : m_svMap) {
+        sv += std::max(src.second->GetErrSeqNum(), src.second->GetErrSpduNum());
+    }
+}
+
 void RX_Application::DisplayStatistic(unsigned interval_sec)
 {
     #define BYTES_TO_MEGABITS(b)  ((b) * 8 / 1000000.0)
@@ -476,10 +495,23 @@ void RX_Application::DisplayStatistic(unsigned interval_sec)
                   << std::endl;
     }
 
+    if (!m_cycleStats.empty()) {
+        Console::CyclicStat::PrintTableHeader();
+        for (auto &[label, stat] : m_cycleStats) {
+            Console::CyclicStat::PrintSampleRow(label, *stat) << "\n";
+        }
+        std::cout << std::endl;
+    }
+
     // Proto information. Routable streams feed the same counters.
+    // Maps are filled in Init() and never change: no lock needed.
+    uint64_t gooseGaps = 0, svGaps = 0;
+    CountGaps(gooseGaps, svGaps);
+
     std::cout << std::format(
                         " Category   | GOOSE      | SV         |\n"
                         "---------------------------------------\n"
+                        "{:<10}  | {:<10} | {:<10} |\n"
                         "{:<10}  | {:<10} | {:<10} |\n"
                         "{:<10}  | {:<10} | {:<10} |\n"
                         "{:<10}  | {:<10} | {:<10} |\n"
@@ -489,7 +521,8 @@ void RX_Application::DisplayStatistic(unsigned interval_sec)
                         "Error",   m_errGooseParserCnt, m_errSVParserCnt,
                         "Unknown", m_rxUnknownGooseCnt, m_rxUnknownSVCnt,
                         "AuthFail", m_errAuthCnt, "-",
-                        "Kernel",  "-", m_pktToKernelCnt
+                        "Kernel",  "-", m_pktToKernelCnt,
+                        "Gaps",    gooseGaps, svGaps
                  )
               << std::endl;
 }

@@ -49,6 +49,13 @@ public:
     // EAL init and link wait are excluded from the --time limit.
     void MarkRunStarted() { m_runStarted = true; }
 
+    // One lost frame increments both counters: takes the larger per stream.
+    void CountGaps(uint64_t &goose, uint64_t &sv);
+
+    void RegisterCycleStat(const std::string &label, DPDK::CyclicStat *stat) {
+        m_cycleStats.emplace_back(label, stat);
+    }
+
     void Run(StopVarType &doWork);
 
 private:
@@ -88,5 +95,8 @@ public:
 
     // Written by the main thread, read by the statistics thread.
     volatile bool   m_runStarted = false;
+
+    // Owned by the loop functions, alive for the whole run.
+    std::vector< std::pair< std::string, DPDK::CyclicStat* > > m_cycleStats;
 };
 

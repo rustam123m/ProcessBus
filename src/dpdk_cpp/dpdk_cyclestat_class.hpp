@@ -17,6 +17,22 @@ namespace DPDK
 
         inline void MarkStartCycling() {
             m_startCycling = DPDK::Clocks::get_current_ticks();
+            m_lastSampleTick = m_startCycling;
+            m_lastSampleTotal = 0;
+        }
+
+        // GetLoadPerc() is only valid after MarkFinishCycling(); this is not.
+        inline double SampleLoadPerc() {
+            const uint64_t now = DPDK::Clocks::get_current_ticks();
+            const uint64_t busy = m_totalProcessTicks - m_lastSampleTotal;
+            const uint64_t span = now - m_lastSampleTick;
+            m_lastSampleTick = now;
+            m_lastSampleTotal = m_totalProcessTicks;
+            return span ? (double)busy / span * 100.0 : 0.0;
+        }
+
+        inline unsigned SampleMaxProcUS() const {
+            return DPDK::Clocks::ticks_to_us(m_maxProcessByTicks);
         }
         inline void MarkFinishCycling() {
             uint64_t finishTick = DPDK::Clocks::get_current_ticks();
@@ -55,6 +71,7 @@ namespace DPDK
 
     private:
         uint64_t    m_startCycling = 0, m_procBegin = 0;
+        uint64_t    m_lastSampleTick = 0, m_lastSampleTotal = 0;
         uint64_t    m_totalProcessTicks = 0,
                     m_maxProcessByTicks = 0,
                     m_minProcessByTicks = 0;

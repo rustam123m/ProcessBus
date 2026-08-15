@@ -104,6 +104,14 @@ namespace Console
                       << std::endl;
         }
 
+        // Load over the last interval.
+        static std::ostream& PrintSampleRow(const std::string &label, DPDK::CyclicStat &st) {
+            const double load = st.SampleLoadPerc();
+            std::cout << std::format("{:<16} | {:<10} | {:<10} | {:<10.3f} | {:<10.3f} |",
+                                     label, 0, st.SampleMaxProcUS(), load, 100.0 - load);
+            return std::cout;
+        }
+
         static std::ostream& PrintTableRow(const std::string &label, const DPDK::CyclicStat &st) {
             std::cout << std::format("{:<16} | {:<10} | {:<10} | {:<10.3f} | {:<10.3f} |",
                                      label,
