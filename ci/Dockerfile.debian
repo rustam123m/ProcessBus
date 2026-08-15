@@ -13,6 +13,7 @@ RUN apt-get update && apt-get -y --no-install-recommends install \
     pciutils python3 python3-pip python3-pyelftools \
     libatomic1 libpcap-dev libnuma-dev \
     libxdp-dev libbpf-dev libelf-dev \
+    libssl-dev \
     elfutils libboost-dev \
     openssh-client sshpass \
     && apt-get clean \

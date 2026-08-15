@@ -24,6 +24,7 @@ RUN apt-get update && apt-get -y --no-install-recommends install \
     libnuma-dev:arm64 libelf-dev:arm64 \
     libpcap-dev:arm64 libbpf-dev:arm64 libxdp-dev:arm64 \
     libbsd-dev:arm64 libatomic1:arm64 \
+    libssl-dev:arm64 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Make the cross pkg-config the default when PKG_CONFIG_LIBDIR is set
