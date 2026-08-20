@@ -9,8 +9,7 @@ add_executable(${TARGET_NAME}
 
     ../common/r_session.hpp
     ../common/r_session.cpp
-    ../common/r_session_crypto.hpp
-    ../common/r_session_crypto.cpp
+    ${RSESS_CRYPTO_SOURCES}
 
     goose_traffic_gen.hpp
     goose_traffic_gen.cpp
@@ -37,6 +36,7 @@ target_include_directories(${TARGET_NAME}
 
 setup_dpdk(${TARGET_NAME})
 setup_libiec61850(${TARGET_NAME})
+setup_crypto(${TARGET_NAME})
 hotpath_disasm(${TARGET_NAME})
 
 install(TARGETS ${TARGET_NAME} DESTINATION bin)

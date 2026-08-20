@@ -16,7 +16,7 @@ RSVTrafficGen::RSVTrafficGen(unsigned num, SV_TYPE type, const RFrameConfig &cfg
     : m_ieds(num), m_baseIdx(baseIdx)
 {
     if (!m_crypto.IsReady()) {
-        throw std::runtime_error("Failed to initialise mbedtls contexts for R-SV");
+        throw std::runtime_error("Failed to initialise crypto contexts for R-SV");
     }
 
     // Builder only — see the same note in RGooseTrafficGen's constructor.

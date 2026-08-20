@@ -15,7 +15,26 @@ endif()
 include(${CMAKE_SOURCE_DIR}/cmake/platforms/${PLATFORM}.cmake)
 message(STATUS "Building for platform: ${PLATFORM_NAME}")
 
+# R-session crypto backend. mbedtls is the default so existing builds and CI
+# are unchanged; openssl is opt-in and must fail loudly if libssl-dev is absent.
+set(CRYPTO_BACKEND "mbedtls" CACHE STRING "R-session crypto backend: mbedtls or openssl")
+set_property(CACHE CRYPTO_BACKEND PROPERTY STRINGS mbedtls openssl)
+if (NOT CRYPTO_BACKEND STREQUAL "mbedtls" AND NOT CRYPTO_BACKEND STREQUAL "openssl")
+    message(FATAL_ERROR "CRYPTO_BACKEND must be 'mbedtls' or 'openssl', got '${CRYPTO_BACKEND}'")
+endif()
+message(STATUS "R-session crypto backend: ${CRYPTO_BACKEND}")
 find_package(PkgConfig REQUIRED)
+
+# OpenSSL via pkg-config, not find_package. The aarch64 cross-build is Debian
+# multiarch: libcrypto lives in /usr/lib/aarch64-linux-gnu and its headers in
+# /usr/include, both outside the toolchain's CMAKE_FIND_ROOT_PATH, which is
+# searched in ONLY mode. find_package therefore cannot see it, while
+# pkg-config already resolves arm64 through PKG_CONFIG_LIBDIR. This is also how
+# DPDK is found. Must stay at top level so the imported target is visible in src/.
+if (CRYPTO_BACKEND STREQUAL "openssl")
+    pkg_check_modules(LIBCRYPTO REQUIRED IMPORTED_TARGET libcrypto)
+    message(STATUS "R-session crypto: OpenSSL ${LIBCRYPTO_VERSION}")
+endif()
 
 # Static DPDK via pkg-config
 pkg_check_modules(DPDK_STATIC REQUIRED IMPORTED_TARGET libdpdk)

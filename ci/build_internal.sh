@@ -25,11 +25,12 @@ OPT_BUILD_DPDK=1
 OPT_BUILD_PBUS=1
 OPT_REBUILD=0
 OPT_RUN_TESTS=0
+OPT_CRYPTO=mbedtls   # R-session crypto backend: mbedtls or openssl
 ACTION=""
 
 function usage()
 {
-    echo "Usage: $0 [--platform=atom/qemu/orangepi3b/all] [--update=0/1] [--dpdk=0/1] [--pbus=0/1] [--rebuild] [--test] [--clean] [--check]"
+    echo "Usage: $0 [--platform=atom/qemu/orangepi3b/all] [--update=0/1] [--dpdk=0/1] [--pbus=0/1] [--rebuild] [--test] [--clean] [--check] [--crypto=mbedtls/openssl]"
     echo ""
     echo "Container-side script. For --setup and --shell, use ci/build.sh."
     exit 1
@@ -138,6 +139,7 @@ function build_apps()
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
         -DCMAKE_CXX_FLAGS_RELWITHDEBINFO="-O3 -g -DNDEBUG"
         -DCMAKE_C_FLAGS_RELWITHDEBINFO="-O3 -g -DNDEBUG"
+        -DCRYPTO_BACKEND="$OPT_CRYPTO"
     )
     if [[ -n "$CMAKE_TOOLCHAIN" ]]; then
         cmake_args+=(-DCMAKE_TOOLCHAIN_FILE="$CMAKE_TOOLCHAIN")
@@ -215,6 +217,9 @@ while [[ "$#" -gt 0 ]]; do
             OPT_BUILD_DPDK=0
             OPT_BUILD_PBUS=0
             OPT_RUN_TESTS=1
+            ;;
+        --crypto=*)
+            OPT_CRYPTO="${1#*=}"
             ;;
         --clean|--check)
             ACTION="${1#--}"

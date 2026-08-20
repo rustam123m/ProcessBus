@@ -61,7 +61,7 @@ public:
             break;
         case RSess::SEC_GCM:
             secAlgo = R_SESSION_SEC_ALGO_AES_128_GCM;
-            // mbedtls picks AES-128 vs AES-256 from the key length.
+            // The backend picks AES-128 vs AES-256 from the key length.
             keySize = static_cast< int >(RSess::GCM_KEY_SIZE);
             break;
         }

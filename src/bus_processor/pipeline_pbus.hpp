@@ -275,7 +275,7 @@ namespace PBus
      * DataMatrix represents a pipeline's table:
      * { mbuf } x { stages } where each stage has its own frame which is an array of mbufs
      *
-     * Owns the lcore's crypto context: mbedtls contexts are stateful and not
+     * Owns the lcore's crypto context: backend contexts are stateful and not
      * thread-safe, so one per worker.
      */
     struct DataMatrix : Pipeline::Matrix< EnumStages,

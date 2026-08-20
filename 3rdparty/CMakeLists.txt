@@ -26,6 +26,26 @@ function(setup_mbedcrypto TARGET_NAME)
     )
 endfunction()
 
+# The sources of RSess::Crypto: the neutral half plus exactly one backend.
+# mbedcrypto stays in every build regardless — libiec61850 is built
+# WITH_MBEDTLS3 and the interop tests use it as the oracle.
+set(RSESS_CRYPTO_SOURCES
+    ${CMAKE_SOURCE_DIR}/src/common/r_session_crypto.hpp
+    ${CMAKE_SOURCE_DIR}/src/common/r_session_crypto_common.cpp
+    ${CMAKE_SOURCE_DIR}/src/common/r_session_crypto_${CRYPTO_BACKEND}.cpp
+    CACHE INTERNAL "RSess::Crypto sources for the selected backend"
+)
+
+# Links whichever backend CRYPTO_BACKEND selected. Every target that compiles
+# RSESS_CRYPTO_SOURCES must call this.
+function(setup_crypto TARGET_NAME)
+    if (CRYPTO_BACKEND STREQUAL "openssl")
+        target_link_libraries(${TARGET_NAME} PRIVATE PkgConfig::LIBCRYPTO)
+    else()
+        target_link_libraries(${TARGET_NAME} PRIVATE mbedcrypto)
+    endif()
+endfunction()
+
 # Configure libiec61850 submodule
 set(WITH_MBEDTLS3                   ON CACHE BOOL "on")
 set(CONFIG_INCLUDE_GOOSE_SUPPORT    ON CACHE BOOL "on")

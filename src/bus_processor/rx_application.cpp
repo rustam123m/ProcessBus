@@ -9,6 +9,8 @@
 #  include "dpdk_cpp/udmabuf_heap.hpp"
 #endif
 
+#include "common/r_session_crypto.hpp"
+
 #include "cxxopts.hpp"
 #include "pipeline_pbus.hpp"
 
@@ -379,11 +381,15 @@ void RX_Application::Init(int argc, char* argv[])
         groups = groups > m_confRSV256Num ? groups : m_confRSV256Num;
         groups = groups > RFrame::R_DST_SPREAD ? RFrame::R_DST_SPREAD : groups;
 
-        std::cout << std::format("\n\tRoutable streams: {} group(s) from {}.{}.{}.{}, security {}\n\n",
+        // The crypto backend goes in the log so a captured run says which one
+        // produced it; the report tooling reads it back from here.
+        std::cout << std::format("\n\tRoutable streams: {} group(s) from {}.{}.{}.{}, security {}"
+                                 " (crypto backend: {})\n\n",
                                  groups,
                                  (m_rDstIP >> 24) & 0xFF, (m_rDstIP >> 16) & 0xFF,
                                  (m_rDstIP >> 8) & 0xFF, m_rDstIP & 0xFF,
-                                 RSess::to_string(m_rMode));
+                                 RSess::to_string(m_rMode),
+                                 RSess::Crypto::BackendName());
     }
 
     if (m_confRGooseNum > 0) {

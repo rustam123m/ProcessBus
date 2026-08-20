@@ -17,7 +17,7 @@ RGooseTrafficGen::RGooseTrafficGen(unsigned MaxGooseNum, unsigned SndFreq,
     : m_ieds(MaxGooseNum), m_baseIdx(baseIdx)
 {
     if (!m_crypto.IsReady()) {
-        throw std::runtime_error("Failed to initialise mbedtls contexts for R-GOOSE");
+        throw std::runtime_error("Failed to initialise crypto contexts for R-GOOSE");
     }
 
     GooseTrafficGen l2(MaxGooseNum, SndFreq, SignalsPerGoose);

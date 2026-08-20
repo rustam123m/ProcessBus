@@ -5,8 +5,7 @@ set(TEST_COMMON_SOURCES
 
     ../common/r_session.hpp
     ../common/r_session.cpp
-    ../common/r_session_crypto.hpp
-    ../common/r_session_crypto.cpp
+    ${RSESS_CRYPTO_SOURCES}
 
     ../bus_generator/goose_traffic_gen.hpp
     ../bus_generator/goose_traffic_gen.cpp
@@ -41,6 +40,7 @@ add_executable(${UNIT_TEST}
 target_link_libraries(${UNIT_TEST} PRIVATE gtest gmock gtest_main)
 setup_dpdk(${UNIT_TEST})
 setup_libiec61850(${UNIT_TEST})
+setup_crypto(${UNIT_TEST})
 add_test(NAME ${UNIT_TEST} COMMAND ${UNIT_TEST})
 install(TARGETS ${UNIT_TEST} DESTINATION bin)
 
@@ -58,5 +58,6 @@ add_executable(${INTEGRATION_TEST}
 target_link_libraries(${INTEGRATION_TEST} PRIVATE gtest gmock gtest_main)
 setup_dpdk(${INTEGRATION_TEST})
 setup_libiec61850(${INTEGRATION_TEST})
+setup_crypto(${INTEGRATION_TEST})
 add_test(NAME ${INTEGRATION_TEST} COMMAND ${INTEGRATION_TEST})
 install(TARGETS ${INTEGRATION_TEST} DESTINATION bin)
