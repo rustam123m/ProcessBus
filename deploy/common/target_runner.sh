@@ -10,6 +10,7 @@ set -e
 
 GEN_ARGS=""
 PROC_ARGS=""
+GEN_LCORES=""
 PROC_LCORES=""
 DURATION=60
 GEN_SCRIPT="./run_generator.sh"
@@ -19,6 +20,7 @@ while [[ "$#" -gt 0 ]]; do
     case $1 in
         --gen-args)    GEN_ARGS="$2"; shift ;;
         --proc-args)   PROC_ARGS="$2"; shift ;;
+        --gen-lcores)  GEN_LCORES="$2"; shift ;;
         --proc-lcores) PROC_LCORES="$2"; shift ;;
         --duration)    DURATION="$2"; shift ;;
         --gen-script)  GEN_SCRIPT="$2"; shift ;;
@@ -81,7 +83,7 @@ echo "Processor started (PID=$PROC_PID)"
 # generator would still win the race.
 sleep 5
 
-$GEN_SCRIPT $GEN_ARGS --time "$DURATION" > "$GEN_LOG" 2>&1 &
+LCORES="$GEN_LCORES" $GEN_SCRIPT $GEN_ARGS --time "$DURATION" > "$GEN_LOG" 2>&1 &
 GEN_PID=$!
 echo "Generator started (PID=$GEN_PID)"
 

@@ -6,7 +6,7 @@ set -e
 
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 REPO_DIR="$SCRIPT_DIR/../.."
-INSTALL_DIR="$REPO_DIR/install-orangepi3b"
+INSTALL_DIR="${INSTALL_DIR:-$REPO_DIR/install-orangepi3b}"
 COMMON_DIR="$REPO_DIR/deploy/common"
 UDMABUF_KO="$REPO_DIR/3rdparty/udmabuf/u-dma-buf.ko"
 DPDK_DEVBIND="$REPO_DIR/3rdparty/dpdk/usertools/dpdk-devbind.py"
@@ -67,6 +67,8 @@ cp -p  "$DPDK_DEVBIND"            "$BUNDLE/"
 cp -p  "$SCRIPT_DIR/setup_platform.sh" "$BUNDLE/"
 cp -p  "$SCRIPT_DIR/run_"*.sh          "$BUNDLE/"
 [ -f "$COMMON_DIR/target_runner.sh" ] && cp -p "$COMMON_DIR/target_runner.sh" "$BUNDLE/" || true
+cp -p  "$COMMON_DIR/device_runner.sh"  "$BUNDLE/"
+cp -p  "$COMMON_DIR/result_parser.sh"  "$BUNDLE/"
 
 # --- 3. Push ---
 $SSH "mkdir -p $REMOTE_DIR"
