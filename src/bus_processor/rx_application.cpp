@@ -255,6 +255,8 @@ void RX_Application::ParseCmdOptions(int argc, char* argv[])
             ("dst-ip", "R-GOOSE/R-SV destination multicast group", cxxopts::value< std::string >())
             ("goose-entries", "Dataset entries per GOOSE/R-GOOSE (must match the generator)",
                               cxxopts::value< unsigned >())
+            ("rx-desc", "RX descriptor ring size, 0 for the platform default",
+                        cxxopts::value< unsigned >())
             ("time", "Stop after N seconds, 0 to run until interrupted", cxxopts::value< unsigned >());
 
         auto result = options.parse(argc, argv);
@@ -280,6 +282,9 @@ void RX_Application::ParseCmdOptions(int argc, char* argv[])
         }
         if (result.count("rsv256")) {
             m_confRSV256Num = result["rsv256"].as< int >();
+        }
+        if (result.count("rx-desc")) {
+            m_rxDescNum = result["rx-desc"].as< unsigned >();
         }
         if (result.count("time")) {
             m_runTimeSec = result["time"].as< unsigned >();
@@ -600,7 +605,8 @@ void RX_Application::Run(StopVarType &doWork)
     // DPDK settings (platform-specific)
     const unsigned MBUF_NUM = Platform::PROCESSOR_MBUF_NUM,
                    CACHE_NUM = Platform::MEMPOOL_CACHE_SIZE,
-                   RX_DESC_NUM = Platform::PROCESSOR_RX_DESC,
+                   RX_DESC_NUM = m_rxDescNum > 0 ? m_rxDescNum
+                                                 : Platform::PROCESSOR_RX_DESC,
                    TX_DESC_NUM = Platform::PROCESSOR_TX_DESC;
 
     // Create memory pool

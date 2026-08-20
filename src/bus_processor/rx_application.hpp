@@ -93,6 +93,10 @@ public:
     unsigned        m_statDisplaySec = 0;
     unsigned        m_runTimeSec = 0;
 
+    // 0 keeps the platform default. The NIC clamps whatever is asked for, so
+    // this only ever lowers the ring - see the granted counts in the banner.
+    unsigned        m_rxDescNum = 0;
+
     // Written by the main thread, read by the statistics thread.
     volatile bool   m_runStarted = false;
 

@@ -280,11 +280,18 @@ namespace DPDK
                 throw std::runtime_error("Can't configure port: " + std::to_string(m_portID));
             }
 
+            const uint16_t wantRx = m_rxDescNum, wantTx = m_txDescNum;
             if (rte_eth_dev_adjust_nb_rx_tx_desc(m_portID,
                                                  &m_rxDescNum,
                                                  &m_txDescNum) != 0) {
                 throw std::runtime_error("Can't adjust RX/TX descriptors");
             }
+            /*
+             * The PMD silently clamps to the device maximum, so a run that only
+             * records what it asked for records the wrong ring size.
+             */
+            std::cout << "\tDescriptors: rx " << wantRx << " -> " << m_rxDescNum
+                      << ", tx " << wantTx << " -> " << m_txDescNum << "\n";
 
             const int descSid = (m_descSocketID >= 0) ? m_descSocketID
                                                       : static_cast<int>(rte_socket_id());
