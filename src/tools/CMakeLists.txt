@@ -23,11 +23,15 @@ build_tool_app(rx_counter)
 add_executable(crypto_bench crypto_bench.cpp)
 setup_mbedcrypto(crypto_bench)
 
-find_package(OpenSSL)
-if (OPENSSL_FOUND)
+# pkg-config rather than find_package: on the aarch64 cross-build the arm64
+# libcrypto sits outside CMAKE_FIND_ROOT_PATH, so find_package misses it and the
+# tool would silently benchmark mbedtls alone on the very platform we want to
+# compare. Still optional — a host without libssl-dev builds the mbedtls variants.
+pkg_check_modules(BENCH_LIBCRYPTO IMPORTED_TARGET libcrypto)
+if (BENCH_LIBCRYPTO_FOUND)
     target_compile_definitions(crypto_bench PRIVATE HAVE_OPENSSL)
-    target_link_libraries(crypto_bench PRIVATE OpenSSL::Crypto)
-    message(STATUS "crypto_bench: OpenSSL ${OPENSSL_VERSION}")
+    target_link_libraries(crypto_bench PRIVATE PkgConfig::BENCH_LIBCRYPTO)
+    message(STATUS "crypto_bench: OpenSSL ${BENCH_LIBCRYPTO_VERSION}")
 else()
     message(STATUS "crypto_bench: OpenSSL not found - mbedtls variants only")
 endif()
