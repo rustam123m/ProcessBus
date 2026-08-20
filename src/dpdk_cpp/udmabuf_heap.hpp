@@ -11,8 +11,9 @@
  * RK3566 / Cortex-A55) DPDK descriptor rings sharing a 64-byte cache line
  * with neighbouring 16-byte descriptors get clobbered by CPU writebacks.
  * The fix is to allocate descriptor rings from Normal/Non-Cacheable
- * memory; u-dma-buf's `sync_mode=1` mapping (selected via O_SYNC) gives us
- * exactly that, backed by physically contiguous CMA.
+ * memory; u-dma-buf's `sync_mode=2` mapping gives us exactly that, backed
+ * by physically contiguous CMA. See the constructor for why mode 2 and not
+ * mode 1.
  *
  * Caller pre-conditions:
  *   - u-dma-buf module loaded (udmabuf0=<size> dma_mask_bit=64).
