@@ -90,5 +90,5 @@ if [[ "$ACTION" == "shell" ]]; then
     exit 0
 fi
 
-podman run "${PODMAN_COMMON[@]}" "$BUILDER_IMAGE" \
+podman run -it "${PODMAN_COMMON[@]}" "$BUILDER_IMAGE" \
     "$CONTAINER_REPO/ci/build_internal.sh" "${PASSTHRU[@]}"
