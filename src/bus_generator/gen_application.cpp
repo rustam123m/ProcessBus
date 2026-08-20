@@ -280,6 +280,202 @@ static void run_r_workers(rte_mempool *pool, uint16_t portID,
     DPDK::Info::display_eth_stats(portID);
 }
 
+/*
+ * Burst mode. The whole second leaves at the second boundary with minimum IPG,
+ * then the wire is idle until the next one.
+ *
+ * Staging - allocation and AmendPacket - happens in that idle window, so the
+ * only work left inside the burst is handing descriptors to the NIC. That is
+ * what makes the burst NIC-paced: the core refills a ring the NIC drains at line
+ * rate, rather than racing it while building packets.
+ *
+ * The unaccepted tail of a tx_burst is re-offered, never freed. Dropping it
+ * would make the generator manufacture the very gap the receiver is being
+ * measured for.
+ */
+template<
+    typename GenClass,
+    size_t (GenClass::*Amend)(uint8_t *packet, const typename GenClass::Desc &desc)
+>
+static void tx_burst_worker_cycle(rte_mempool *pool, uint16_t portID, uint16_t queueID,
+                                  GenClass &gen, GenAppStat &stat,
+                                  const std::vector< typename GenClass::Desc > &plan,
+                                  RTxControl *ctrl, StopVarType &doWork)
+{
+    const size_t total = plan.size();
+    if (total == 0) {
+        throw std::runtime_error("Burst plan is empty! Nothing to send!");
+    }
+
+    set_thread_priority(DEF_GENERATOR_PRIORITY);
+    std::vector< rte_mbuf* > staged(total, nullptr);
+
+    uint64_t secStartTick = 0;
+    if (ctrl != nullptr) {
+        int rc = pthread_barrier_wait(&ctrl->barrier);
+        if (rc == PTHREAD_BARRIER_SERIAL_THREAD) {
+            ctrl->startTick = DPDK::Clocks::get_current_ticks();
+        }
+        pthread_barrier_wait(&ctrl->barrier);
+        secStartTick = ctrl->startTick;
+    } else {
+        secStartTick = DPDK::Clocks::get_current_ticks();
+    }
+
+    const uint64_t ticksPerSec = DPDK::Clocks::get_ticks_per_sec();
+
+    stat.procStat.MarkStartCycling();
+    while (doWork) {
+        size_t stagedNum = 0;
+        while (stagedNum < total && doWork) {
+            const unsigned num = static_cast< unsigned >(
+                                     std::min< size_t >(BURST_SIZE, total - stagedNum));
+            if (rte_pktmbuf_alloc_bulk(pool, staged.data() + stagedNum, num) != 0) {
+                rte_eth_tx_done_cleanup(portID, queueID, 0);
+                continue;
+            }
+            for (unsigned i=0;i<num;++i) {
+                rte_mbuf *m = staged[stagedNum + i];
+                m->pkt_len = (gen.*Amend)(rte_pktmbuf_mtod(m, uint8_t *),
+                                          plan[stagedNum + i]);
+                m->data_len = m->pkt_len;
+            }
+            stagedNum += num;
+        }
+        if (!doWork) {
+            rte_pktmbuf_free_bulk(staged.data(), stagedNum);
+            break;
+        }
+
+        secStartTick += ticksPerSec;
+        const uint64_t now = DPDK::Clocks::get_current_ticks();
+        if (now > secStartTick) {
+            // Staging outran its own second: resynchronise rather than free-run,
+            // so the cadence stays one burst per second and the count says so.
+            ++stat.txLateCnt;
+            secStartTick = now;
+        }
+        DPDK::Clocks::delay_until_ticks(secStartTick);
+
+        stat.procStat.MarkProcBegin();
+        size_t sent = 0;
+        while (sent < stagedNum && doWork) {
+            const uint16_t num = static_cast< uint16_t >(
+                                     std::min< size_t >(BURST_SIZE, stagedNum - sent));
+            const uint16_t nb = rte_eth_tx_burst(portID, queueID, staged.data() + sent, num);
+            if (nb == 0) {
+                ++stat.txRetryCnt;
+            }
+            sent += nb;
+        }
+        stat.procStat.MarkProcEnd();
+        stat.txPktCnt += sent;
+
+        /*
+         * Only reachable when the run is stopping mid-burst: the fire loop
+         * retries until the ring takes everything, so there is no failure path
+         * here. Freeing the remainder is shutdown, not a send error - counting
+         * it would break err_send == 0 as the "the generator was fine" gate.
+         */
+        if (sent < stagedNum) {
+            rte_pktmbuf_free_bulk(staged.data() + sent, stagedNum - sent);
+        }
+    }
+    stat.procStat.MarkFinishCycling();
+
+    if (ctrl == nullptr) {
+        DPDK::Info::display_eth_stats(portID);
+    }
+}
+
+template<
+    typename GenClass,
+    size_t (GenClass::*Amend)(uint8_t *packet, const typename GenClass::Desc &desc)
+>
+static void run_r_burst_workers(rte_mempool *pool, uint16_t portID,
+                                std::vector< std::unique_ptr< GenClass > > &gens,
+                                std::vector< GenAppStat > &stats,
+                                const std::vector< std::vector< typename GenClass::Desc > > &plans,
+                                StopVarType &doWork)
+{
+    const unsigned workers = gens.size();
+
+    RTxControl ctrl;
+    pthread_barrier_init(&ctrl.barrier, nullptr, workers);
+
+    std::vector< RTxWorkerCtx > ctx(workers);
+
+    unsigned idx = 1, lcore = 0;
+    RTE_LCORE_FOREACH_WORKER(lcore) {
+        if (idx >= workers) {
+            break;
+        }
+        const unsigned w = idx;
+        ctx[w].run = [=, &gens, &stats, &plans, &ctrl, &doWork]() {
+            tx_burst_worker_cycle< GenClass, Amend >(pool, portID, (uint16_t)w,
+                                                     *gens[w], stats[w], plans[w],
+                                                     &ctrl, doWork);
+        };
+        rte_eal_remote_launch(r_tx_trampoline, &ctx[w], lcore);
+        ++idx;
+    }
+
+    std::cout << "\n\tStart burst loop with TX workers: " << workers << std::endl;
+    tx_burst_worker_cycle< GenClass, Amend >(pool, portID, 0, *gens[0], stats[0],
+                                             plans[0], &ctrl, doWork);
+
+    rte_eal_mp_wait_lcore();
+    pthread_barrier_destroy(&ctrl.barrier);
+
+    DPDK::Info::display_eth_stats(portID);
+}
+
+template<
+    typename GenClass,
+    size_t (GenClass::*AmendNone)(uint8_t *, const typename GenClass::Desc &),
+    size_t (GenClass::*AmendHmac)(uint8_t *, const typename GenClass::Desc &),
+    size_t (GenClass::*AmendGcm)(uint8_t *, const typename GenClass::Desc &)
+>
+static void tx_r_burst_cycle_mt(rte_mempool *pool, uint16_t portID,
+                                std::vector< std::unique_ptr< GenClass > > &gens,
+                                std::vector< GenAppStat > &stats,
+                                const std::vector< std::vector< typename GenClass::Desc > > &plans,
+                                RSess::SecurityMode mode, StopVarType &doWork)
+{
+    switch (mode) {
+    case RSess::SEC_NONE:
+        run_r_burst_workers< GenClass, AmendNone >(pool, portID, gens, stats, plans, doWork);
+        break;
+    case RSess::SEC_HMAC:
+        run_r_burst_workers< GenClass, AmendHmac >(pool, portID, gens, stats, plans, doWork);
+        break;
+    case RSess::SEC_GCM:
+        run_r_burst_workers< GenClass, AmendGcm >(pool, portID, gens, stats, plans, doWork);
+        break;
+    }
+}
+
+/*
+ * One plan per worker over that worker's own IED slice. Indices are
+ * worker-local - the generator folds its baseIdx back in when amending - and the
+ * repetition count is the generator's own schedule length, so the cadence is
+ * read from the same place the steady-state path reads it.
+ */
+template< typename GenClass >
+static std::vector< std::vector< typename GenClass::Desc > >
+make_r_burst_plans(std::vector< std::unique_ptr< GenClass > > &gens, unsigned num)
+{
+    const unsigned workers = gens.size();
+    std::vector< std::vector< typename GenClass::Desc > > plans;
+    plans.reserve(workers);
+    for (unsigned i=0;i<workers;++i) {
+        auto [lo, hi] = ied_slice(num, workers, i);
+        plans.push_back(make_burst_plan< typename GenClass::Desc >(
+                            hi - lo, gens[i]->GetTxUnits().size()));
+    }
+    return plans;
+}
+
 template<
     typename GenClass,
     size_t (GenClass::*AmendNone)(uint8_t *, const typename GenClass::Desc &),
@@ -341,6 +537,7 @@ GenApplication::GenApplication(int argc, char *argv[])
             ("src-ip", "R-GOOSE/R-SV source address", cxxopts::value<std::string>())
             ("goose-entries", "Dataset entries per GOOSE/R-GOOSE (must match the processor)",
                               cxxopts::value<unsigned>())
+            ("burst", "Send the whole second at the second boundary, not spread over it")
             ("time", "Stop after N seconds, 0 to run until interrupted", cxxopts::value<unsigned>());
 
         auto result = options.parse(argc, argv);
@@ -388,6 +585,9 @@ GenApplication::GenApplication(int argc, char *argv[])
             if (!RFrame::parse_ipv4(ip.c_str(), m_rframe.dstIP)) {
                 throw std::invalid_argument("Invalid --dst-ip: " + ip);
             }
+        }
+        if (result.count("burst")) {
+            m_burst = true;
         }
         if (result.count("time")) {
             m_runTimeSec = result["time"].as<unsigned>();
@@ -497,14 +697,160 @@ void GenApplication::DisplayResults()
                      "\nSUMMARY_GEN\n"
                      "\tSent          \ttx_packets={}\n"
                      "\tTX ring full  \terr_send={}\n"
-                     "\tBusiest loop  \tload_pct={:.3f}\tmin_us={}\tmax_us={}\n"
-                     "END_SUMMARY_GEN\n",
+                     "\tBusiest loop  \tload_pct={:.3f}\tmin_us={}\tmax_us={}\n",
                      txPkt,
                      errSend,
                      top.GetLoadPerc(),
                      top.GetMinProcUS(),
-                     top.GetMaxProcUS())
-              << std::endl;
+                     top.GetMaxProcUS());
+
+    /*
+     * Burst-only counters, so a steady-state log keeps exactly the shape the
+     * stored batches and their parsers already have. tx_retry counts bursts of
+     * TX-ring-full - those packets were re-offered, not lost - and tx_late
+     * counts bursts whose staging overran the second they belonged to.
+     */
+    if (m_burst) {
+        uint64_t retries = 0, late = 0;
+        for (const auto &st : m_stats) {
+            retries += st.txRetryCnt;
+            late    += st.txLateCnt;
+        }
+        std::cout << std::format("\tBurst pacing  \ttx_retry={}\ttx_late={}\n",
+                                 retries, late);
+    }
+
+    std::cout << "END_SUMMARY_GEN\n" << std::endl;
+}
+
+template< typename Plans >
+static size_t total_burst(const Plans &plans)
+{
+    size_t n = 0;
+    for (const auto &p : plans) {
+        n += p.size();
+    }
+    return n;
+}
+
+/*
+ * A staged burst holds every one of its mbufs at once, which the steady-state
+ * path never does - it recycles 32 at a time. So the pool, not the TX ring, is
+ * the binding constraint here.
+ */
+void GenApplication::CheckBurstFits(size_t staged, unsigned workers, size_t frameSize,
+                                    uint16_t portID) const
+{
+    const uint64_t need = static_cast< uint64_t >(staged)
+                        + static_cast< uint64_t >(workers) * Platform::GENERATOR_TX_DESC
+                        + static_cast< uint64_t >(workers) * Platform::MEMPOOL_CACHE_SIZE;
+    if (need >= Platform::GENERATOR_MBUF_NUM) {
+        throw std::runtime_error("Burst of " + std::to_string(staged)
+            + " packets does not fit the mempool: need " + std::to_string(need)
+            + " mbufs, have " + std::to_string(Platform::GENERATOR_MBUF_NUM)
+            + " - use a smaller --goose/--rgoose frequency");
+    }
+
+    /*
+     * A burst that takes longer than a second to put on the wire cannot be one
+     * burst per second. This warns rather than refuses: link_speed is read from
+     * the PHY and has been seen reporting a stale value right after link-up, and
+     * a wrong refusal would cost a whole batch.
+     */
+    rte_eth_link link = {};
+    if (rte_eth_link_get_nowait(portID, &link) == 0 && link.link_speed > 0) {
+        const double bits = (double)staged * (frameSize + 20/*preamble+IFG*/) * 8;
+        const double sec = bits / ((double)link.link_speed * 1000000.0);
+        std::cout << std::format("\nBurst: {} packets, {:.1f} ms of wire time at {} Mbit/s\n",
+                                 staged, sec * 1000.0, link.link_speed);
+        if (sec > 1.0) {
+            std::cout << "WARNING: the burst cannot fit in one second - the cadence "
+                         "will collapse into continuous traffic (watch tx_late)\n";
+        }
+    }
+}
+
+void GenApplication::RunBurstCycles(rte_mempool *pool, uint16_t portID, StopVarType &doWork)
+{
+    if (m_gooseNum > 0) {
+        GooseTrafficGen gen(m_gooseNum, m_gooseSendFreq, m_gooseEntries);
+
+        DPDK::PoolSetter(gen.GetSkeletonBuffer(), gen.GetSkeletonSize())
+                        .FillPackets(pool);
+
+        auto plan = make_burst_plan< GooseTrafficGen::Desc >(m_gooseNum, m_gooseSendFreq);
+        CheckBurstFits(plan.size(), 1, gen.GetSkeletonSize(), portID);
+
+        std::cout << "\n\tStart burst loop\n";
+        tx_burst_worker_cycle< GooseTrafficGen, &GooseTrafficGen::AmendPacket >(
+            pool, portID, 0, gen, m_stats[0], plan, nullptr, doWork);
+    } else if (m_sv80Num > 0 || m_sv256Num > 0) {
+        const SV_TYPE type = (m_sv80Num > 0) ? SV_TYPE::SV80 : SV_TYPE::SV256;
+        const unsigned num = (m_sv80Num > 0) ? m_sv80Num : m_sv256Num;
+        SVTrafficGen gen(num, type);
+
+        DPDK::PoolSetter(gen.GetSkeletonBuffer(), gen.GetSkeletonSize())
+                        .FillPackets(pool);
+
+        // SV has no frequency flag: its cadence belongs to the profile, so the
+        // repetition count comes from the schedule the generator built itself.
+        auto plan = make_burst_plan< SVTrafficGen::Desc >(num, gen.GetTxUnits().size());
+        CheckBurstFits(plan.size(), 1, gen.GetSkeletonSize(), portID);
+
+        std::cout << "\n\tStart burst loop\n";
+        if (type == SV_TYPE::SV80) {
+            tx_burst_worker_cycle< SVTrafficGen, &SVTrafficGen::AmendPacketSV80 >(
+                pool, portID, 0, gen, m_stats[0], plan, nullptr, doWork);
+        } else {
+            tx_burst_worker_cycle< SVTrafficGen, &SVTrafficGen::AmendPacketSV256 >(
+                pool, portID, 0, gen, m_stats[0], plan, nullptr, doWork);
+        }
+    } else if (m_rgooseNum > 0) {
+        auto gens = make_r_workers< RGooseTrafficGen >(m_workerNum, m_rgooseNum,
+            [&](unsigned lo, unsigned count){ return std::make_unique< RGooseTrafficGen >(
+                     count, m_rgooseSendFreq, m_gooseEntries, m_rframe, lo); });
+
+        DPDK::PoolSetter(gens[0]->GetSkeletonBuffer(), gens[0]->GetSkeletonSize())
+                        .FillPackets(pool);
+
+        auto plans = make_r_burst_plans< RGooseTrafficGen >(gens, m_rgooseNum);
+        CheckBurstFits(total_burst(plans), m_workerNum, gens[0]->GetSkeletonSize(), portID);
+
+        tx_r_burst_cycle_mt< RGooseTrafficGen,
+                             &RGooseTrafficGen::AmendPacket< RSess::SEC_NONE >,
+                             &RGooseTrafficGen::AmendPacket< RSess::SEC_HMAC >,
+                             &RGooseTrafficGen::AmendPacket< RSess::SEC_GCM > >(
+            pool, portID, gens, m_stats, plans, m_rframe.mode, doWork);
+    } else if (m_rsv80Num > 0 || m_rsv256Num > 0) {
+        const SV_TYPE type = (m_rsv80Num > 0) ? SV_TYPE::SV80 : SV_TYPE::SV256;
+        const unsigned num = (m_rsv80Num > 0) ? m_rsv80Num : m_rsv256Num;
+
+        auto gens = make_r_workers< RSVTrafficGen >(m_workerNum, num,
+            [&](unsigned lo, unsigned count){ return std::make_unique< RSVTrafficGen >(
+                     count, type, m_rframe, lo); });
+
+        DPDK::PoolSetter(gens[0]->GetSkeletonBuffer(), gens[0]->GetSkeletonSize())
+                        .FillPackets(pool);
+
+        auto plans = make_r_burst_plans< RSVTrafficGen >(gens, num);
+        CheckBurstFits(total_burst(plans), m_workerNum, gens[0]->GetSkeletonSize(), portID);
+
+        if (type == SV_TYPE::SV80) {
+            tx_r_burst_cycle_mt< RSVTrafficGen,
+                                 &RSVTrafficGen::AmendPacketSV80< RSess::SEC_NONE >,
+                                 &RSVTrafficGen::AmendPacketSV80< RSess::SEC_HMAC >,
+                                 &RSVTrafficGen::AmendPacketSV80< RSess::SEC_GCM > >(
+                pool, portID, gens, m_stats, plans, m_rframe.mode, doWork);
+        } else {
+            tx_r_burst_cycle_mt< RSVTrafficGen,
+                                 &RSVTrafficGen::AmendPacketSV256< RSess::SEC_NONE >,
+                                 &RSVTrafficGen::AmendPacketSV256< RSess::SEC_HMAC >,
+                                 &RSVTrafficGen::AmendPacketSV256< RSess::SEC_GCM > >(
+                pool, portID, gens, m_stats, plans, m_rframe.mode, doWork);
+        }
+    } else {
+        std::cerr << "You have to specify GOOSE, SV, R-GOOSE or R-SV to generate!\n";
+    }
 }
 
 void GenApplication::Run(StopVarType &doWork)
@@ -571,7 +917,9 @@ void GenApplication::Run(StopVarType &doWork)
     TxCycleConfig conf { .pool=pool.GetPtr(), .nicPortID=port.GetID(), .nicQueueID=0 };
 
     // Main cycle
-    if (m_gooseNum > 0) {
+    if (m_burst) {
+        RunBurstCycles(pool.GetPtr(), port.GetID(), doWork);
+    } else if (m_gooseNum > 0) {
         // GOOSE
         GooseTrafficGen gen(m_gooseNum, m_gooseSendFreq, m_gooseEntries);
 

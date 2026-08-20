@@ -26,6 +26,7 @@ set(UNIT_TEST unit_tests)
 add_executable(${UNIT_TEST}
     ${TEST_COMMON_SOURCES}
     goose_traffic_test.cpp
+    burst_plan_test.cpp
     appid_container_test.cpp
     pipeline_test.cpp
     mac_addr_test.cpp
