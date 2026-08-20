@@ -2,6 +2,7 @@
 deploy/orangepi3b/openwrt
 deploy/*/results/
 **/pbus/**
+**__pycache__**
 build-*/
 build/
 install-*/
