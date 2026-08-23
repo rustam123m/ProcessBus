@@ -23,3 +23,10 @@ tmp/
 *.data
 tags
 
+# Report and plot generators
+deploy/common/plot_*.py
+deploy/common/report_*.py
+!deploy/common/report_gaps.py
+deploy/common/collect_stats.py
+deploy/common/find_limits.py
+deploy/common/make_env_conf.py
