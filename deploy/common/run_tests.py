@@ -33,6 +33,7 @@ import glob
 import json
 import os
 import re
+import statistics
 import subprocess
 import sys
 import time
@@ -349,23 +350,32 @@ def run_clock(path):
 
 
 def last_load(path):
-    """RX CPU load: the Load % column of the periodic per-lcore table.
+    """RX CPU load: the steady-state Load % of the busiest lcore.
 
-    Rows are "<name> | Min(us) | Max(us) | Load % | Wait % |". The counters are
-    per interval, so the latest row of each lcore is its current load; the
-    busiest one is what limits the receiver.
+    Rows are "<name> | Min(us) | Max(us) | Load % | Wait % |" and the counters
+    are per interval, but the final row is printed at shutdown and covers the
+    whole run - including the seconds the processor idles before and after the
+    generator, which dilutes it by about a fifth. Take the median of the steady
+    samples instead, dropping zeros and then the ramp and the tail, exactly as
+    steady_pps() does for rates.
     """
     if not os.path.isfile(path):
         return 0.0
-    per_lcore = {}
+    samples = {}
     for line in open(path, errors="ignore"):
         c = [x.strip() for x in line.split("|")]
         if len(c) < 5 or not re.match(r"^(Main|LCore\d+)$", c[0]):
             continue
         try:
-            per_lcore[c[0]] = float(c[3])
+            v = float(c[3])
         except ValueError:
             continue
+        if v > 0:
+            samples.setdefault(c[0], []).append(v)
+    per_lcore = {}
+    for name, vals in samples.items():
+        core = vals[1:-1] if len(vals) > 3 else vals
+        per_lcore[name] = statistics.median(core) if core else 0.0
     return max(per_lcore.values(), default=0.0)
 
 

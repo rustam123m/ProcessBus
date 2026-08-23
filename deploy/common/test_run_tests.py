@@ -355,10 +355,12 @@ class VerdictTest(unittest.TestCase):
         self.assertEqual(res["cls"], "VOID")
         self.assertEqual(res["tx"], 0)
         self.assertEqual(res["rx"], 0)
-        # result_parser.sh still says pass=true; the runner must not trust it.
+        # A log with no SUMMARY block parses as all zeros, which used to read as
+        # a flawless run. Absence of the block is itself the failure.
         with open(os.path.join(self.dir, "t.summary.json")) as fh:
             js = json.load(fh)
-        self.assertTrue(js["pass"])
+        self.assertFalse(js["pass"])
+        self.assertIn("summary missing", js["fail_reason"])
 
     def test_clean_run(self):
         table = "PPS         | {v}          |\n"

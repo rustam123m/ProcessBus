@@ -34,6 +34,7 @@ add_executable(${UNIT_TEST}
     parser_error_test.cpp
     r_session_test.cpp
     r_routing_test.cpp
+    r_envelope_test.cpp
     r_goose_interop_test.cpp
     main.cpp
 )

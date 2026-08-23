@@ -409,7 +409,8 @@ void RX_Application::Init(int argc, char* argv[])
                 .SetDataSetRef(std::format("IED{:08}LDName/LLN0$DataSet", i + 1))
                 .SetGOCBRef(std::format("IED{:08}LDName/LLN0$GO$GOCB", i + 1))
                 .SetCRev(1)
-                .SetNumEntries(m_gooseEntries);
+                .SetNumEntries(m_gooseEntries)
+                .SetDstIP(RFrame::stream_dst_ip(m_rDstIP, i));
             m_gooseMap[src->GetPassport()] = src;
 
             Console::GooseSource::PrintCfgTableRow(src);
@@ -425,7 +426,8 @@ void RX_Application::Init(int argc, char* argv[])
                 .SetAppID(0x0001 + i)
                 .SetSVID(std::format("SVID{:04}", i + 1))
                 .SetCRev(1)
-                .SetNumASDU(1);
+                .SetNumASDU(1)
+                .SetDstIP(RFrame::stream_dst_ip(m_rDstIP, i));
             m_svMap[src->GetPassport()] = src;
 
             Console::SVStreamSource::PrintCfgTableRow(src);
@@ -441,7 +443,8 @@ void RX_Application::Init(int argc, char* argv[])
                 .SetAppID(0x0001 + i)
                 .SetSVID(std::format("SVID{:04}", i + 1))
                 .SetCRev(1)
-                .SetNumASDU(8);
+                .SetNumASDU(8)
+                .SetDstIP(RFrame::stream_dst_ip(m_rDstIP, i));
             m_svMap[src->GetPassport()] = src;
 
             Console::SVStreamSource::PrintCfgTableRow(src);
@@ -630,6 +633,7 @@ void RX_Application::Run(StopVarType &doWork)
                             .AdjustQueues(1, 1)
                             .SetDescriptors(RX_DESC_NUM, TX_DESC_NUM)
                             .SetDescriptorSocketId(descSocketID)
+                            .SetRxIpCksum(true)
                             .Build();
 
     // Common information

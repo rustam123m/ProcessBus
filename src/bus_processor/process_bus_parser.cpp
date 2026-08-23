@@ -2,6 +2,8 @@
 
 #include "common/sv_profile.hpp"
 
+#include <rte_mbuf.h>
+
 #include <cstring>
 #include <iostream>
 
@@ -300,6 +302,91 @@ namespace
 #define NET_TO_CPU_U16(x)       RTE_STATIC_BSWAP16(*(uint16_t *)(x))
 #define NET_TO_CPU_U32(x)       RTE_STATIC_BSWAP32(*(uint32_t *)(x))
 #define NET_TO_CPU_U64(x)       RTE_STATIC_BSWAP64(*(uint64_t *)(x))
+
+namespace
+{
+    // Big-endian reads over possibly unaligned envelope fields.
+    inline uint16_t rd_u16(const uint8_t* p)
+    {
+        return static_cast< uint16_t >((static_cast< uint16_t >(p[0]) << 8) | p[1]);
+    }
+
+    inline uint32_t rd_u32(const uint8_t* p)
+    {
+        return (static_cast< uint32_t >(p[0]) << 24)
+             | (static_cast< uint32_t >(p[1]) << 16)
+             | (static_cast< uint32_t >(p[2]) << 8)
+             |  static_cast< uint32_t >(p[3]);
+    }
+
+    // A valid header sums (with end-around carry) to 0xFFFF, checksum included.
+    bool ipv4_checksum_ok(const uint8_t* ipHeader)
+    {
+        uint32_t sum = 0;
+        for (unsigned i=0;i<20;i+=2) {
+            sum += rd_u16(ipHeader + i);
+        }
+        while (sum >> 16) {
+            sum = (sum & 0xFFFF) + (sum >> 16);
+        }
+        return sum == 0xFFFF;
+    }
+}
+
+int ProcessBusParser::validate_r_envelope(const uint8_t *buffer, unsigned size,
+                                          uint64_t olFlags, uint32_t &dstIP)
+{
+    // Ethernet EtherType must be IPv4.
+    if (size < 14 + 20 || buffer[12] != 0x08 || buffer[13] != 0x00) {
+        return R_ENV_ERR_NOT_IPV4;
+    }
+
+    const uint8_t* ip = buffer + 14;
+
+    // Version 4, IHL 5: a bare 20-byte header, no options.
+    if (ip[0] != 0x45) {
+        return R_ENV_ERR_IHL;
+    }
+
+    // The declared datagram bounds everything below and must fit the frame.
+    // Ethernet padding after it is allowed (frame may be longer).
+    const uint16_t ipTotalLen = rd_u16(ip + 2);
+    if (ipTotalLen < 28 || 14u + ipTotalLen > size) {
+        return R_ENV_ERR_IP_LEN;
+    }
+
+    // More-Fragments flag or nonzero fragment offset: fragmentation unsupported.
+    const uint16_t flagsFrag = rd_u16(ip + 6);
+    if ((flagsFrag & 0x2000) != 0 || (flagsFrag & 0x1FFF) != 0) {
+        return R_ENV_ERR_FRAGMENT;
+    }
+
+    if (ip[9] != 17) {                      // UDP
+        return R_ENV_ERR_PROTO;
+    }
+
+    const uint8_t* udp = ip + 20;
+    if (rd_u16(udp + 2) != RSess::UDP_DST_PORT) {
+        return R_ENV_ERR_UDP_PORT;
+    }
+
+    const uint16_t udpLen = rd_u16(udp + 4);
+    if (udpLen < 8 || udpLen != ipTotalLen - 20u) {
+        return R_ENV_ERR_UDP_LEN;
+    }
+
+    // IPv4 header checksum, from the NIC when it verified it, else in software.
+    const uint64_t ck = olFlags & RTE_MBUF_F_RX_IP_CKSUM_MASK;
+    if (ck == RTE_MBUF_F_RX_IP_CKSUM_BAD) {
+        return R_ENV_ERR_IP_CKSUM;
+    }
+    if (ck == RTE_MBUF_F_RX_IP_CKSUM_UNKNOWN && !ipv4_checksum_ok(ip)) {
+        return R_ENV_ERR_IP_CKSUM;
+    }
+
+    dstIP = rd_u32(ip + 16);
+    return R_ENV_OK;
+}
 
 int ProcessBusParser::parse_goose_packet(const uint8_t *buffer, int size,
                                          GoosePassport &passport,

@@ -18,6 +18,9 @@ struct GoosePassport
     uint32_t            foundEntries = 0;
     uint32_t            crev = 0;
 
+    // Destination IPv4 multicast group (host order). R-GOOSE only; L2 leaves it 0.
+    uint32_t            dstIP = 0;
+
     std::string_view    goid;
     std::string_view    dataset;
     std::string_view    gocbref;
@@ -26,6 +29,7 @@ struct GoosePassport
     bool operator==(const GoosePassport &r) const {
         return (dmac == r.dmac)
                 && (appid == r.appid)
+                && (dstIP == r.dstIP)
                 && (goid == r.goid)
                 && (dataset == r.dataset)
                 && (gocbref == r.gocbref)
@@ -36,6 +40,9 @@ struct GoosePassport
     friend std::ostream& operator<<(std::ostream &out, const GoosePassport &obj) {
         out << "\tDMAC = " << obj.dmac << "\n"
             << std::format("\tAPPID = {:04X}\n", obj.appid)
+            << std::format("\tDstIP = {}.{}.{}.{}\n",
+                           (obj.dstIP >> 24) & 0xFF, (obj.dstIP >> 16) & 0xFF,
+                           (obj.dstIP >> 8) & 0xFF, obj.dstIP & 0xFF)
             << "\tGOID = " << obj.goid << "\n"
             << "\tDATASET = " << obj.dataset << "\n"
             << "\tGOCB = " << obj.gocbref << "\n"
@@ -112,6 +119,10 @@ public:
         m_numEntries = num;
         return *this;
     }
+    GooseSource&    SetDstIP(uint32_t dstIP) {
+        m_dstIP = dstIP;
+        return *this;
+    }
 
     MAC             GetDMAC() const {
         return m_dmac;
@@ -142,6 +153,7 @@ public:
         GoosePassport pass;
         pass.dmac = m_dmac;
         pass.appid = m_appid;
+        pass.dstIP = m_dstIP;
         pass.crev = m_crev;
         pass.num = m_numEntries;
         pass.goid = m_goid;
@@ -199,6 +211,7 @@ private:
     std::string m_gocbRef;
     uint32_t    m_crev = 0;
     uint32_t    m_numEntries = 0;
+    uint32_t    m_dstIP = 0;        // R-GOOSE destination group, host order
 
     // State
     uint32_t    m_stNum = 0, m_sqNum = 0;

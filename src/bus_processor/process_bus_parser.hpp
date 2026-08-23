@@ -23,6 +23,25 @@ constexpr int R_PARSE_ERR_AUTH = -10;
 // marks the complete frame broken and is counted as an SV parser error.
 constexpr int SV_PARSE_ERR_QUALITY = -11;
 
+/*
+ * validate_r_envelope() outcomes. All are broken-frame conditions folded into
+ * the parser-error total; a distinct code per cause keeps the tests specific.
+ * The destination-IP check is deliberately absent: a wrong group address is
+ * carried in the passport and resolves to an Unknown-APPID lookup miss.
+ */
+enum R_ENV_ERR : int
+{
+    R_ENV_OK              = 0,
+    R_ENV_ERR_NOT_IPV4    = -20,   // EtherType is not IPv4
+    R_ENV_ERR_IHL         = -21,   // version != 4 or IHL != 5 (options present)
+    R_ENV_ERR_IP_LEN      = -22,   // total length < 28 or exceeds received bytes
+    R_ENV_ERR_FRAGMENT    = -23,   // More-Fragments set or nonzero fragment offset
+    R_ENV_ERR_PROTO       = -24,   // IP protocol is not UDP
+    R_ENV_ERR_UDP_PORT    = -25,   // UDP destination port is not 102
+    R_ENV_ERR_UDP_LEN     = -26,   // UDP length < 8 or != IP total length - 20
+    R_ENV_ERR_IP_CKSUM    = -27,   // IPv4 header checksum rejected
+};
+
 class ProcessBusParser
 {
 public:
@@ -86,6 +105,21 @@ public:
         }
         return NON_BUS_PROTO;
     }
+
+    /*
+     * Validate the fixed Ethernet/IPv4/UDP envelope of a routable frame before
+     * any session, crypto, or APDU work. Every field read is bounded by size.
+     *
+     * olFlags mbuf ol_flags carrying the RX IPv4-checksum result; tests pass
+     *               the RTE_MBUF_F_RX_IP_CKSUM_* state directly. UNKNOWN falls
+     *               back to a software checksum.
+     * dstIP   set to the destination group (host order) on success
+     *
+     * Returns R_ENV_OK, or a negative R_ENV_ERR describing the first failure.
+     */
+    static int
+    validate_r_envelope(const uint8_t *buffer, unsigned size,
+                        uint64_t olFlags, uint32_t &dstIP);
 
     /*
      * Returns 0 on success, -100 when a mandatory field is missing,

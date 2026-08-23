@@ -20,11 +20,15 @@ struct SVStreamPassport
     uint32_t            crev = 0;
     std::string_view    svid;
 
+    // Destination IPv4 multicast group (host order). R-SV only; L2 leaves it 0.
+    uint32_t            dstIP = 0;
+
     bool operator==(const SVStreamPassport &r) const {
         return (dmac == r.dmac)
                 && (appid == r.appid)
                 && (num == r.num)
                 && (crev == r.crev)
+                && (dstIP == r.dstIP)
                 && (svid == r.svid);
     }
 
@@ -43,6 +47,9 @@ struct SVStreamPassport
             << "\tDMAC =  " << obj.dmac << "\n"
             << std::format(
                "\tAPPID = {:04X}\n", obj.appid)
+            << std::format("\tDstIP = {}.{}.{}.{}\n",
+                           (obj.dstIP >> 24) & 0xFF, (obj.dstIP >> 16) & 0xFF,
+                           (obj.dstIP >> 8) & 0xFF, obj.dstIP & 0xFF)
             << "\tCRev =  " << obj.crev << "\n"
             << "\tNum =   " << obj.num << "\n"
             << "\tSVID =  " << obj.svid << "\n";
@@ -83,6 +90,10 @@ public:
         m_numASDU = num;
         return *this;
     }
+    SVStreamSource&    SetDstIP(uint32_t dstIP) {
+        m_dstIP = dstIP;
+        return *this;
+    }
 
     MAC             GetDMAC() const { 
         return m_dmac;
@@ -113,6 +124,7 @@ public:
         pass.crev = m_crev;
         pass.svid = m_svid;
         pass.num = m_numASDU;
+        pass.dstIP = m_dstIP;
         return pass;
     }
 
@@ -153,6 +165,7 @@ private:
     std::string m_svid;
     uint32_t    m_crev = 0;
     uint32_t    m_numASDU = 0;
+    uint32_t    m_dstIP = 0;        // R-SV destination group, host order
 
     // State
     uint32_t    m_smpCnt = 0;

@@ -237,6 +237,13 @@ namespace DPDK
             return *this;
         }
 
+        // Ask the PMD to verify the IPv4 header checksum. Never mandatory: the
+        // parser falls back to a software check when the NIC cannot offload it.
+        PortBuilder& SetRxIpCksum(bool enable = true) {
+            m_rxIpCksum = enable;
+            return *this;
+        }
+
         Port Build() {
             if (m_mbufPool == nullptr) {
                 throw std::runtime_error("Mempool is not set!");
@@ -267,6 +274,19 @@ namespace DPDK
                 }
                 /* Force full Tx path in the driver, required for IEEE1588 */
                 m_ethConf.txmode.offloads |= RTE_ETH_TX_OFFLOAD_MULTI_SEGS;
+            }
+
+            if (m_rxIpCksum) {
+                const bool supported =
+                    (devInfo.rx_offload_capa & RTE_ETH_RX_OFFLOAD_IPV4_CKSUM) != 0;
+                if (supported) {
+                    m_ethConf.rxmode.offloads |= RTE_ETH_RX_OFFLOAD_IPV4_CKSUM;
+                }
+                // Self-describing captures: a run states whether the NIC
+                // verified IPv4 checksums or the software path did.
+                std::cout << "\tIPv4 checksum offload: requested, "
+                          << (supported ? "enabled" : "unsupported (software fallback)")
+                          << "\n";
             }
 
             /* m_ethConf.link_speeds = RTE_ETH_LINK_SPEED_2_5G; */
@@ -345,6 +365,7 @@ namespace DPDK
                         m_txDescNum = 1024;
         int             m_descSocketID = -1;   // -1 → use rte_socket_id()
         bool            m_timestamping = false;
+        bool            m_rxIpCksum = false;
     };
 }
 

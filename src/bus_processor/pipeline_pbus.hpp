@@ -184,6 +184,14 @@ namespace PBus
                 uint8_t *packet = rte_pktmbuf_mtod(frame.buf[i], uint8_t *);
                 const unsigned size = rte_pktmbuf_pkt_len(frame.buf[i]);
 
+                // Reject a broken IPv4/UDP envelope before any crypto or APDU work.
+                uint32_t dstIP = 0;
+                if (ProcessBusParser::validate_r_envelope(
+                        packet, size, frame.buf[i]->ol_flags, dstIP) != R_ENV_OK) {
+                    ++app.m_errGooseParserCnt;
+                    continue;
+                }
+
                 GoosePassport pass;
                 GooseState state;
                 RSess::SessionHeader session;
@@ -191,6 +199,7 @@ namespace PBus
                                  packet, size, app.m_rMode, matrix.crypto,
                                  session, pass, state);
                 if (retval == 0) {
+                    pass.dstIP = dstIP;
                     auto src = app.m_gooseMap.find(pass);
                     if (src != app.m_gooseMap.end()) {
                         src->second->ProcessSessionState(session.spduNumber);
@@ -230,6 +239,14 @@ namespace PBus
                 uint8_t *packet = rte_pktmbuf_mtod(frame.buf[i], uint8_t *);
                 const unsigned size = rte_pktmbuf_pkt_len(frame.buf[i]);
 
+                // Reject a broken IPv4/UDP envelope before any crypto or APDU work.
+                uint32_t dstIP = 0;
+                if (ProcessBusParser::validate_r_envelope(
+                        packet, size, frame.buf[i]->ol_flags, dstIP) != R_ENV_OK) {
+                    ++app.m_errSVParserCnt;
+                    continue;
+                }
+
                 SVStreamPassport pass;
                 SVStreamState state;
                 RSess::SessionHeader session;
@@ -237,6 +254,7 @@ namespace PBus
                                  packet, size, app.m_rMode, matrix.crypto,
                                  session, pass, state);
                 if (retval == 0) {
+                    pass.dstIP = dstIP;
                     auto src = app.m_svMap.find(pass);
                     if (src != app.m_svMap.end()) {
                         src->second->ProcessSessionState(session.spduNumber);

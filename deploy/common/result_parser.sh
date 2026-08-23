@@ -81,11 +81,40 @@ if [ -f "$PROC_LOG" ]; then
     proc_max_us=${proc_max_us:-0}
 
     # Per-lcore Load%: "<name> | min | max | load | wait |" -> {"name": load, ...}
+    #
+    # One key per lcore, carrying the steady-state median of its periodic
+    # samples. Emitting every sample under its lcore's name produced duplicate
+    # JSON keys, of which a parser keeps only the last - and the last row is the
+    # whole-run figure printed at shutdown, diluted by the seconds the processor
+    # runs before and after the generator. Same treatment as steady_pps():
+    # drop zeros, then the first ramp sample and the last partial one.
     proc_lcore_load=$(grep -E '^\s*(Main|LCore)' "$PROC_LOG" | awk -F'|' '
         {
             name=$1; gsub(/^[ \t]+|[ \t]+$/, "", name);
             load=$4; gsub(/[^0-9.]/, "", load);
-            printf "%s\"%s\": %s", (NR>1 ? ", " : ""), name, (load == "" ? "0" : load);
+            if (load == "" || load + 0 <= 0) { next }
+            if (!(name in seen)) { order[++names] = name; seen[name] = 1 }
+            samples[name, ++count[name]] = load + 0;
+        }
+        END {
+            for (i = 1; i <= names; ++i) {
+                name = order[i]; n = count[name];
+                for (j = 1; j <= n; ++j) { v[j] = samples[name, j] }
+                lo = 1; hi = n;
+                if (n > 3) { lo = 2; hi = n - 1 }        # drop ramp and tail
+                m = 0; k = 0;
+                for (j = lo; j <= hi; ++j) { w[++k] = v[j] }
+                for (a = 2; a <= k; ++a) {               # insertion sort, k is small
+                    key = w[a];
+                    for (b = a - 1; b >= 1 && w[b] > key; --b) { w[b + 1] = w[b] }
+                    w[b + 1] = key;
+                }
+                if (k == 0) { m = 0 }
+                else if (k % 2) { m = w[(k + 1) / 2] }
+                else { m = (w[k / 2] + w[k / 2 + 1]) / 2 }
+                printf "%s\"%s\": %.3f", (i > 1 ? ", " : ""), name, m;
+                delete w; delete v;
+            }
         }')
 fi
 
@@ -97,6 +126,11 @@ add_fail() {
     pass=false
     fail_reason="${fail_reason:+$fail_reason, }$1"
 }
+
+# A log whose SUMMARY block never printed parses as all zeros, and every check
+# below reads zero as good news. A run that was cut short is a failed run.
+grep -q '^END_SUMMARY_GEN$'  "$GEN_LOG"  || add_fail "generator summary missing"
+grep -q '^END_SUMMARY_PROC$' "$PROC_LOG" || add_fail "processor summary missing"
 
 [ "${goose_seq_err:-0}" -gt 0 ]  && add_fail "goose_seq_err=$goose_seq_err"
 [ "${sv_smp_err:-0}" -gt 0 ]     && add_fail "sv_smp_err=$sv_smp_err"
