@@ -63,6 +63,83 @@ TEST(GooseParserErrors, MissingRequiredFields)
 
 // --- SV error paths ---
 
+namespace
+{
+    void put_sv_len(std::vector<uint8_t> &out, size_t length)
+    {
+        if (length < 0x80) {
+            out.push_back(static_cast< uint8_t >(length));
+        } else if (length <= 0xff) {
+            out.push_back(0x81);
+            out.push_back(static_cast< uint8_t >(length));
+        } else {
+            ASSERT_LE(length, 0xffffu);
+            out.push_back(0x82);
+            out.push_back(static_cast< uint8_t >(length >> 8));
+            out.push_back(static_cast< uint8_t >(length));
+        }
+    }
+
+    std::vector<uint8_t> make_sv(uint8_t declaredAsdus, unsigned actualAsdus)
+    {
+        std::vector<uint8_t> sequence;
+        for (unsigned i=0;i<actualAsdus;++i) {
+            std::vector<uint8_t> asdu = {
+                0x80,0x01,'S',                         // svID
+                0x82,0x02,0x00,static_cast<uint8_t>(i), // smpCnt
+                0x83,0x04,0x00,0x00,0x00,0x01,         // confRev
+                0x85,0x01,0x01,                        // smpSynch
+                0x87,0x40                               // eight value/Quality pairs
+            };
+            for (unsigned signal=0;signal<8;++signal) {
+                asdu.insert(asdu.end(), {
+                    0x00,0x00,static_cast<uint8_t>(i),
+                    static_cast<uint8_t>(signal),        // INT32 value
+                    0x00,0x00,0x00,0x00                 // Quality = good
+                });
+            }
+            sequence.push_back(0x30);
+            put_sv_len(sequence, asdu.size());
+            sequence.insert(sequence.end(), asdu.begin(), asdu.end());
+        }
+
+        std::vector<uint8_t> pdu = {0x80,0x01,declaredAsdus,0xa2};
+        put_sv_len(pdu, sequence.size());
+        pdu.insert(pdu.end(), sequence.begin(), sequence.end());
+
+        // Ethernet + non-VLAN SV application header.
+        std::vector<uint8_t> frame(22, 0);
+        frame[12] = 0x88;
+        frame[13] = 0xba;
+        frame[15] = 0x01; // APPID
+        frame.push_back(0x60);
+        put_sv_len(frame, pdu.size());
+        frame.insert(frame.end(), pdu.begin(), pdu.end());
+        return frame;
+    }
+
+    size_t nth_sv_data_tag(const std::vector<uint8_t> &frame, unsigned wanted)
+    {
+        unsigned found = 0;
+        for (size_t i=0;i + 1<frame.size();++i) {
+            if (frame[i] == 0x87 && frame[i + 1] == 0x40) {
+                if (found++ == wanted) {
+                    return i;
+                }
+            }
+        }
+        return frame.size();
+    }
+
+    int parse_sv(const std::vector<uint8_t> &frame)
+    {
+        SVStreamPassport pass;
+        SVStreamState state;
+        return ProcessBusParser::parse_sv_packet(
+                   frame.data(), static_cast< int >(frame.size()), pass, state);
+    }
+}
+
 TEST(SVParserErrors, PacketTooSmall)
 {
     uint8_t packet[63] = {0};
@@ -121,7 +198,7 @@ TEST(SVParserErrors, MissingASDUTag)
     uint8_t packet[64] = {0};
     packet[12] = 0x88; packet[13] = 0xBA; // SV EtherType
     packet[22] = 0x60; // PDU tag
-    packet[23] = 0x08; // PDU length
+    packet[23] = 0x07; // PDU length
     packet[24] = 0x80; // noASDU tag
     packet[25] = 0x01; // length 1
     packet[26] = 0x01; // value: 1 ASDU
@@ -132,6 +209,38 @@ TEST(SVParserErrors, MissingASDUTag)
     SVStreamPassport pass;
     SVStreamState state;
     ASSERT_EQ(ProcessBusParser::parse_sv_packet(packet, 64, pass, state), -5);
+}
+
+TEST(SVParserValidation, AcceptsAllDeclaredASDUs)
+{
+    const std::vector<uint8_t> frame = make_sv(8, 8);
+    ASSERT_EQ(parse_sv(frame), 0);
+}
+
+TEST(SVParserValidation, RejectsBadQualityInLastASDU)
+{
+    std::vector<uint8_t> frame = make_sv(8, 8);
+    const size_t dataTag = nth_sv_data_tag(frame, 7);
+    ASSERT_LT(dataTag, frame.size());
+
+    // Corrupt the last Quality field of the last ASDU.
+    frame[dataTag + 2 + 7 * 8 + 4] = 0x01;
+    ASSERT_EQ(parse_sv(frame), SV_PARSE_ERR_QUALITY);
+}
+
+TEST(SVParserValidation, RejectsMissingDataInLastASDU)
+{
+    std::vector<uint8_t> frame = make_sv(8, 8);
+    const size_t dataTag = nth_sv_data_tag(frame, 7);
+    ASSERT_LT(dataTag, frame.size());
+
+    frame[dataTag] = 0x89; // bounded unknown field; mandatory data is now absent
+    ASSERT_NE(parse_sv(frame), 0);
+}
+
+TEST(SVParserValidation, RejectsASDUCountMismatch)
+{
+    ASSERT_NE(parse_sv(make_sv(8, 7)), 0);
 }
 
 // --- get_proto_type ---

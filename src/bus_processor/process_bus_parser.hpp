@@ -19,6 +19,9 @@ enum BUS_PROTO
 
 // Returned by the R parsers when the signature or GCM tag does not verify.
 constexpr int R_PARSE_ERR_AUTH = -10;
+// The configured SV profile carries INT32/Quality pairs. Any nonzero Quality
+// marks the complete frame broken and is counted as an SV parser error.
+constexpr int SV_PARSE_ERR_QUALITY = -11;
 
 class ProcessBusParser
 {
@@ -93,8 +96,13 @@ public:
     parse_goose_packet(const uint8_t *buffer, int size,
                        GoosePassport &passport, GooseState &state);
 
-    /**
-     * @function parse_sv_packet
+    /*
+     * Parse and validate every ASDU in an SV APDU. The supported data profile
+     * is a sequence of 4-byte INT32 values followed by 4-byte Quality fields;
+     * every Quality byte must be zero.
+     *
+     * Returns 0 on success, SV_PARSE_ERR_QUALITY for a nonzero Quality field,
+     * or another negative value for malformed ASN.1/required fields.
      */
     static int
     parse_sv_packet(const uint8_t *buffer, int size,

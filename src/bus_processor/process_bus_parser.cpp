@@ -1,5 +1,7 @@
 #include "process_bus_parser.hpp"
 
+#include "common/sv_profile.hpp"
+
 #include <cstring>
 #include <iostream>
 
@@ -96,6 +98,202 @@ namespace
             reinterpret_cast< const char* >(data),
             static_cast< size_t >(length)
         };
+    }
+
+    /*
+     * The old SV walker used the unbounded decoder above and ignored container
+     * ends. Keep the hot GOOSE parser unchanged, but make every SV length read
+     * fail closed before it can step outside its enclosing TLV.
+     */
+    bool decode_asn1_len_bounded(const uint8_t* buffer, uint32_t end,
+                                 uint32_t &pos, uint32_t &length)
+    {
+        if (pos >= end) {
+            return false;
+        }
+
+        const uint8_t first = buffer[pos++];
+        if ((first & 0x80) == 0) {
+            length = first;
+            return true;
+        }
+
+        const uint8_t octets = first & 0x7f;
+        if (octets == 0 || octets > sizeof(length) || octets > end - pos) {
+            return false;               // indefinite or out-of-bounds length
+        }
+
+        length = 0;
+        for (uint8_t i=0;i<octets;++i) {
+            length = (length << 8) | buffer[pos++];
+        }
+        return true;
+    }
+
+    bool take_tlv(const uint8_t* buffer, uint32_t end, uint32_t &pos,
+                  uint8_t expectedTag, uint32_t &valueEnd)
+    {
+        if (pos >= end || buffer[pos++] != expectedTag) {
+            return false;
+        }
+
+        uint32_t length = 0;
+        if (!decode_asn1_len_bounded(buffer, end, pos, length)
+            || length > end - pos) {
+            return false;
+        }
+        valueEnd = pos + length;
+        return true;
+    }
+
+    /*
+     * Common L2/R-SV APDU walker. One frame has one 0x60 PDU containing
+     * noASDU 0x30 structures. The first ASDU supplies the stream passport and
+     * first smpCnt; every ASDU is still fully walked and validated.
+     */
+    int parse_sv_apdu(const uint8_t* apdu, uint32_t apduSize,
+                      SVStreamPassport &passport, SVStreamState &state)
+    {
+        uint32_t pos = 0, pduEnd = 0;
+        if (!take_tlv(apdu, apduSize, pos, 0x60, pduEnd)) {
+            return -3;
+        }
+
+        if (pos >= pduEnd || apdu[pos++] != 0x80) {       // noASDU
+            return -4;
+        }
+        uint32_t noAsduLength = 0;
+        if (!decode_asn1_len_bounded(apdu, pduEnd, pos, noAsduLength)
+            || noAsduLength == 0 || noAsduLength > 2
+            || noAsduLength > pduEnd - pos) {
+            return -4;
+        }
+        const uint32_t declaredAsdus = decode_asn1_number(apdu + pos, noAsduLength);
+        if (declaredAsdus == 0 || declaredAsdus > UINT16_MAX) {
+            return -4;
+        }
+        passport.num = static_cast< uint16_t >(declaredAsdus);
+        pos += noAsduLength;
+
+        uint32_t sequenceEnd = 0;
+        if (!take_tlv(apdu, pduEnd, pos, 0xa2, sequenceEnd)
+            || sequenceEnd != pduEnd) {
+            return -4;
+        }
+
+        uint32_t actualAsdus = 0;
+        while (pos < sequenceEnd) {
+            uint32_t asduEnd = 0;
+            if (!take_tlv(apdu, sequenceEnd, pos, 0x30, asduEnd)) {
+                return -5;
+            }
+
+            bool foundSvid = false, foundSmpCnt = false;
+            bool foundConfRev = false, foundSmpSynch = false, foundData = false;
+            std::string_view svid;
+            uint16_t smpCnt = 0;
+            uint32_t confRev = 0;
+            uint8_t previousTag = 0;
+
+            while (pos < asduEnd) {
+                const uint8_t tag = apdu[pos++];
+                if (tag <= previousTag) {
+                    return -6;               // duplicate or out-of-order field
+                }
+                previousTag = tag;
+
+                uint32_t length = 0;
+                if (!decode_asn1_len_bounded(apdu, asduEnd, pos, length)
+                    || length > asduEnd - pos) {
+                    return -6;
+                }
+
+                switch (tag) {
+                case 0x80: // svID
+                    if (foundSvid || length == 0) {
+                        return -6;
+                    }
+                    svid = make_stringview(apdu + pos, static_cast< int >(length));
+                    foundSvid = true;
+                    break;
+                case 0x81: // datset (optional)
+                    if (length == 0) {
+                        return -6;
+                    }
+                    break;
+                case 0x82: // smpCnt
+                    if (foundSmpCnt || length != 2) {
+                        return -6;
+                    }
+                    smpCnt = static_cast< uint16_t >(decode_asn1_number(apdu + pos, length));
+                    foundSmpCnt = true;
+                    break;
+                case 0x83: // confRev
+                    if (foundConfRev || length != 4) {
+                        return -6;
+                    }
+                    confRev = decode_asn1_number(apdu + pos, length);
+                    foundConfRev = true;
+                    break;
+                case 0x84: // refrTm
+                    if (length != 8) {
+                        return -6;
+                    }
+                    break;
+                case 0x85: // smpSynch
+                    if (foundSmpSynch || length != 1) {
+                        return -6;
+                    }
+                    foundSmpSynch = true;
+                    break;
+                case 0x86: // smpRate
+                    if (length != 2) {
+                        return -6;
+                    }
+                    break;
+                case 0x87: // sequence of INT32 value / 32-bit Quality pairs
+                    if (foundData || length != SVProfile::ASDU_DATA_SIZE) {
+                        return -6;
+                    }
+                    for (uint32_t off=SVProfile::VALUE_SIZE;off<length;
+                         off+=SVProfile::CHANNEL_SIZE) {
+                        // Byte-wise: the data field is not aligned in the frame.
+                        const uint32_t quality = decode_asn1_number(
+                                apdu + pos + off, SVProfile::QUALITY_SIZE);
+                        if (quality != SVProfile::QUALITY_GOOD) {
+                            return SV_PARSE_ERR_QUALITY;
+                        }
+                    }
+                    foundData = true;
+                    break;
+                case 0x88: // smpMod
+                    if (length != 2) {
+                        return -6;
+                    }
+                    break;
+                default:
+                    return -6;
+                }
+                pos += length;
+            }
+
+            if (!foundSvid || !foundSmpCnt || !foundConfRev
+                || !foundSmpSynch || !foundData) {
+                return -6;
+            }
+            if (actualAsdus == 0) {
+                passport.svid = svid;
+                passport.crev = confRev;
+                state.smpCnt = smpCnt;
+            } else if (svid != passport.svid || confRev != passport.crev) {
+                // One frame is dispatched as one stream, so all ASDUs must
+                // describe that same stream configuration.
+                return -6;
+            }
+            ++actualAsdus;
+        }
+
+        return (actualAsdus == declaredAsdus) ? 0 : -7;
     }
 }
 
@@ -236,70 +434,8 @@ int ProcessBusParser::parse_sv_packet(const uint8_t *buffer, int size,
     passport.appid = NET_TO_CPU_U16(buffer + pos);
     pos += 8; // APPID, Length, Reserv1, Reserv2
 
-    // SV PDU (tag 0x60)
-    if (pos >= size || buffer[pos++] != 0x60) {
-        return -3;
-    }
-    decode_asn1_len(buffer, &pos);
-
-    // Parse noASDU (tag 0x80)
-    if (pos + 3 <= size && buffer[pos] == 0x80) {
-        passport.num =  buffer[pos + 2];
-        pos += 3;
-    }
-
-    // Sequence of ASDUs (tag 0xa2)
-    if (pos >= size || buffer[pos++] != 0xa2) {
-        return -4;
-    }
-    decode_asn1_len(buffer, &pos);
-
-    // ASDU (tag 0x30)
-    if (pos >= size || buffer[pos++] != 0x30) {
-        return -5;
-    }
-    decode_asn1_len(buffer, &pos);
-
-    // Parse ASDU fields
-    while (pos < size) {
-        uint8_t tag = buffer[pos++];
-        int length = decode_asn1_len(buffer, &pos);
-        if (pos + length > size || length <= 0) {
-            break;
-        }
-
-        switch (tag) {
-        case 0x80: // svID
-            passport.svid =  make_stringview(buffer + pos, length);
-            break;
-        case 0x82: // smpCnt
-            state.smpCnt = NET_TO_CPU_U16(buffer + pos);
-            break;
-        case 0x83: // confRev
-            passport.crev = NET_TO_CPU_U32(buffer + pos);
-            break;
-        case 0x84: // refrTm
-            if (length == 8) {
-                /* std::copy(buffer.begin() + pos, buffer.begin() + pos + 8, pkt.refrTm.begin()); */
-            }
-            break;
-        case 0x85: // smpSynch
-            /* pkt.smpSynch = buffer[pos]; */
-            break;
-        case 0x86: // smpRate
-            /* pkt.smpRate = (buffer[pos] << 8) | buffer[pos + 1]; */
-            break;
-        case 0x87: // data
-            /* pkt.data = buffer.subspan(pos, length); */
-            break;
-        case 0x88: // smpMod
-            /* pkt.smpMod = buffer[pos]; */
-            break;
-        }
-
-        pos += length;
-    }
-    return 0;
+    return parse_sv_apdu(buffer + pos, static_cast< uint32_t >(size) - pos,
+                         passport, state);
 }
 
 
@@ -502,50 +638,5 @@ int ProcessBusParser::parse_r_sv_packet(uint8_t *buffer, int size,
     passport.dmac = MAC(buffer);
     passport.appid = phdr.appid;
 
-    uint32_t pos = 0;
-    if (apduSize < 2 || apdu[pos++] != 0x60) {
-        return -3;
-    }
-    decode_asn1_len(apdu, &pos);
-
-    // noASDU (tag 0x80)
-    if (pos + 3 <= (uint32_t)apduSize && apdu[pos] == 0x80) {
-        passport.num = apdu[pos + 2];
-        pos += 3;
-    }
-
-    // Sequence of ASDUs (tag 0xa2)
-    if (pos >= (uint32_t)apduSize || apdu[pos++] != 0xa2) {
-        return -4;
-    }
-    decode_asn1_len(apdu, &pos);
-
-    // ASDU (tag 0x30)
-    if (pos >= (uint32_t)apduSize || apdu[pos++] != 0x30) {
-        return -5;
-    }
-    decode_asn1_len(apdu, &pos);
-
-    while (pos < (uint32_t)apduSize) {
-        uint8_t tag = apdu[pos++];
-        int length = decode_asn1_len(apdu, &pos);
-        if (pos + length > (uint32_t)apduSize || length <= 0) {
-            break;
-        }
-
-        switch (tag) {
-        case 0x80: // svID
-            passport.svid = make_stringview(apdu + pos, length);
-            break;
-        case 0x82: // smpCnt
-            state.smpCnt = NET_TO_CPU_U16(apdu + pos);
-            break;
-        case 0x83: // confRev
-            passport.crev = NET_TO_CPU_U32(apdu + pos);
-            break;
-        }
-
-        pos += length;
-    }
-    return 0;
+    return parse_sv_apdu(apdu, static_cast< uint32_t >(apduSize), passport, state);
 }

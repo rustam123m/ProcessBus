@@ -1,5 +1,7 @@
 #include "sv_traffic_gen.hpp"
 
+#include "common/sv_profile.hpp"
+
 #include "iec61850_common.h"
 #include "mms_value.h"
 #include "sv_publisher.h"
@@ -12,7 +14,11 @@ const char *SVID_PATTERN = "SVID" PLACEHOLDER;
 
 namespace
 {
-    constexpr int SV_CHANNELS = 8;
+    constexpr int SV_CHANNELS = static_cast< int >(SVProfile::CHANNELS);
+
+    // The processor validates Quality without libiec61850; this is the only
+    // place both definitions are visible, so it is where they are tied together.
+    static_assert(SVProfile::QUALITY_GOOD == QUALITY_VALIDITY_GOOD);
 
     // Give every sample value and quality flag a defined value.
     void init_asdu_data(SVPublisher_ASDU asdu, const int vIndex[], const int qIndex[])

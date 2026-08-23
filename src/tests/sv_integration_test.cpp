@@ -44,6 +44,11 @@ public:
             SVPublisher_ASDU_setINT32(asdu, vIndex[1], 2);
             SVPublisher_ASDU_setINT32(asdu, vIndex[2], 3);
             SVPublisher_ASDU_setINT32(asdu, vIndex[3], 4);
+            // Quality is not zeroed by addQuality(); the parser rejects a frame
+            // that carries anything but good, so set it as a publisher would.
+            for (int i=0;i<8;++i) {
+                SVPublisher_ASDU_setQuality(asdu, qIndex[i], QUALITY_VALIDITY_GOOD);
+            }
             SVPublisher_ASDU_increaseSmpCnt(asdu);
 
             int size = 0;
