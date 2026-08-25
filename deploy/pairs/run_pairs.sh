@@ -1,5 +1,5 @@
 #!/bin/bash
-# Cross-device scenarios from pairs.conf: generator on one board, processor on
+# Cross-device scenarios from atom_opi3b.conf: generator on one board, processor on
 # the other. Deploy device_runner.sh + role scripts to both boards first; this
 # script only triggers and collects.
 #
@@ -12,7 +12,7 @@ set -e
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
 REPO_DIR="$SCRIPT_DIR/../.."
 RESULTS_DIR="$SCRIPT_DIR/results"
-PAIRS_FILE="$SCRIPT_DIR/pairs.conf"
+PAIRS_FILE="$SCRIPT_DIR/atom_opi3b.conf"
 PARSE_SCRIPT="$REPO_DIR/deploy/common/result_parser.sh"
 
 START_DELAY=15          # processor leads the generator by this much
@@ -27,8 +27,8 @@ usage() {
     cat <<EOF
 Usage: $0 [--scenario <name> | --all] [--list]
 
-  --scenario <name>  Run a single scenario from pairs.conf
-  --all              Run every scenario in pairs.conf
+  --scenario <name>  Run a single scenario from atom_opi3b.conf
+  --all              Run every scenario in atom_opi3b.conf
   --list             Print scenario names and exit
   -h, --help         Show this help
 EOF

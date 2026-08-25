@@ -112,7 +112,7 @@ Single entry point: `deploy/qotom/deploy.sh`.
 What it does in order:
 1. (Optional) `ci/build.sh --rebuild`.
 2. Bundle `install-atom/*` + common scripts + this directory's scripts and
-   `scenarios.conf` into `deploy/qotom/pbus/`, scp to
+   `atom_loopback.conf` into `deploy/qotom/pbus/`, scp to
    `$USER@$HOST:/home/jarvis/pbus/`.
 3. Check the sentinel `/var/run/pbus_rt` on the target. If absent,
    run `setup_platform.sh` (governor, IRQ pin, kthread RT priorities,
@@ -123,7 +123,7 @@ What it does in order:
 5. Exit code = number of failed scenarios.
 
 Available scenarios are listed by running `deploy.sh` with no flags
-and reading `scenarios.conf`.
+and reading `atom_loopback.conf`.
 
 ---
 

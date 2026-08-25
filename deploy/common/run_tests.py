@@ -22,9 +22,9 @@ Parsing and the verdict reuse report_gaps.py (steady-state PPS, gap/CRC gates)
 and result_parser.sh (summary.json), unchanged.
 
 Usage (the shebang runs it through uv; no virtualenv to manage):
-    ./deploy/common/run_tests.py --conf deploy/pairs/pairs.conf --all
-    ./deploy/common/run_tests.py --conf deploy/pairs/pairs.conf --scenario cm_b2o_rgoose_gcm
-    ./deploy/common/run_tests.py --conf deploy/qotom/scenarios.conf --list
+    ./deploy/common/run_tests.py --conf deploy/pairs/atom_opi3b.conf --all
+    ./deploy/common/run_tests.py --conf deploy/pairs/atom_opi3b.conf --scenario cm_b2o_rgoose_gcm
+    ./deploy/common/run_tests.py --conf deploy/qotom/atom_loopback.conf --list
 """
 
 import argparse
@@ -270,7 +270,7 @@ def check_names(path, rows):
 
 
 def load_conf(path):
-    """pairs.conf (9 fields) and scenarios.conf (7 fields, both roles on blackbox)."""
+    """atom_opi3b.conf (9 fields) and atom_loopback.conf (7 fields, both roles on blackbox)."""
     rows = []
     with open(path) as fh:
         for line in fh:
@@ -631,7 +631,7 @@ def run_one(row, out, workdir):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--conf", default=os.path.join(REPO, "deploy/pairs/pairs.conf"))
+    ap.add_argument("--conf", default=os.path.join(REPO, "deploy/pairs/atom_opi3b.conf"))
     ap.add_argument("--scenario", action="append", default=[],
                     help="run only this scenario (repeatable)")
     ap.add_argument("--all", action="store_true", help="run every scenario in the config")

@@ -13,7 +13,7 @@ REPO_DIR="$SCRIPT_DIR/../.."
 INSTALL_DIR="${INSTALL_DIR:-$REPO_DIR/install-atom}"
 COMMON_DIR="$REPO_DIR/deploy/common"
 RESULTS_DIR="$SCRIPT_DIR/results"
-SCENARIOS_FILE="$SCRIPT_DIR/scenarios.conf"
+SCENARIOS_FILE="$SCRIPT_DIR/atom_loopback.conf"
 PARSE_SCRIPT="$COMMON_DIR/result_parser.sh"
 BUNDLE="$SCRIPT_DIR/pbus"
 SENTINEL="/var/run/pbus_rt"
@@ -36,8 +36,8 @@ Default behaviour: push files only (no rebuild, no scenarios).
   --rebuild          Rebuild via ci/build.sh --rebuild before pushing
   --no-push          Skip pushing files and RT tuning; run against what is
                      already deployed (keeps the on-target binary untouched)
-  --scenario <name>  Run a single scenario from scenarios.conf
-  --all              Run all scenarios from scenarios.conf
+  --scenario <name>  Run a single scenario from atom_loopback.conf
+  --all              Run all scenarios from atom_loopback.conf
   --host <addr>      Override target host (default: $HOST)
   -h, --help         Show this help
 
@@ -79,7 +79,7 @@ if [ "$DO_PUSH" -eq 1 ]; then
     cp -p  "$COMMON_DIR/result_parser.sh" "$BUNDLE/"
     cp -p  "$SCRIPT_DIR/setup_platform.sh" "$BUNDLE/"
     cp -p  "$SCRIPT_DIR/run_"*.sh          "$BUNDLE/"
-    cp -p  "$SCRIPT_DIR/scenarios.conf"    "$BUNDLE/"
+    cp -p  "$SCRIPT_DIR/atom_loopback.conf"    "$BUNDLE/"
 
     $SSH "mkdir -p $REMOTE_DIR"
     $SCP -rp "$BUNDLE/"* "$USER@$HOST:$REMOTE_DIR/"
