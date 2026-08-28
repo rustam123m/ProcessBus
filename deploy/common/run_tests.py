@@ -39,7 +39,8 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from report_gaps import (steady_pps, steady_mbps, bad_streams,  # noqa: E402
+from report_gaps import (steady_pps, steady_mbps, steady_wire_mbps,  # noqa: E402
+                         bad_streams, WIRE_OVERHEAD,
                          GAP_OK, CRC_OK, KILO, TOL)
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -309,16 +310,24 @@ def last_pps(path):
     return val
 
 
-def last_mbps(path):
+def last_mbps(path, label="Load"):
     """Latest 'Load(Mbps) | n |' sample - progress, not a verdict."""
     if not os.path.isfile(path):
         return 0.0
     val = 0.0
     for line in open(path, errors="ignore"):
-        m = re.match(r"\s*Load\(Mbps\)\s*\|\s*([\d.]+)\s*\|", line)
+        m = re.match(rf"\s*{label}\(Mbps\)\s*\|\s*([\d.]+)\s*\|", line)
         if m:
             val = float(m.group(1))
     return val
+
+
+def last_wire_mbps(path):
+    """Latest wire-rate sample, corrected for logs older than the Wire row."""
+    wire = last_mbps(path, "Wire")
+    if wire:
+        return wire
+    return last_mbps(path) + last_pps(path) * WIRE_OVERHEAD * 8 / 1e6
 
 
 def last_field(path, field):
@@ -534,7 +543,7 @@ def verdict(row, gen_log, proc_log, out):
     load = max((pr.get("lcore_load_pct") or {}).values(), default=last_load(proc_log))
     # Wire load of the received traffic. Prefer the periodic samples: the
     # summary's rx_mbps is a lifetime figure and reads 0 on several runs.
-    mbps = steady_mbps(proc_log) or pr.get("rx_mbps", 0.0)
+    mbps = steady_wire_mbps(proc_log) or pr.get("rx_mbps", 0.0)
     return dict(tx=tx, rx=rx, gaps=gaps, crc=crc, missed=missed, load=load,
                 mbps=mbps, ring_full=pr.get("ring_full", 0), cls=cls)
 
@@ -583,7 +592,7 @@ def run_one(row, out, workdir):
                   f"gaps {live_gaps(proc_log):>7,}  "
                   f"missed {last_field(proc_log, 'Missed'):>7,}  "
                   f"crc {last_field(proc_log, 'Errors'):>5,}  "
-                  f"RX {last_mbps(proc_log):>8,.1f} Mb/s  "
+                  f"RX {last_wire_mbps(proc_log):>8,.1f} Mb/s  "
                   f"load {last_load(proc_log):>5.1f}%   "
                   f"({run_clock(gen_log)}/{row['duration']}s)")
             losing = losing + 1 if losing_badly(tx, rx) else 0
@@ -695,10 +704,10 @@ def main():
         return 130
 
     print(f"\n{'test':32}{'TX':>11}{'RX':>11}{'gaps':>11}{'crc':>6}"
-          f"{'ring_full':>12}{'RXMb/s':>10}{'RXload%':>9}  class")
+          f"{'ring_full':>12}{'RXwireMb/s':>12}{'RXload%':>9}  class")
     for name, res in done:
         print(f"{name:32}{res['tx']:>11,}{res['rx']:>11,}{res['gaps']:>11,}"
-              f"{res['crc']:>6,}{res['ring_full']:>12,}{res['mbps']:>10,.1f}"
+              f"{res['crc']:>6,}{res['ring_full']:>12,}{res['mbps']:>12,.1f}"
               f"{res['load']:>9.1f}  {res['cls']}"
               f"{' (stopped early)' if res.get('note') else ''}")
     print(f"\n{len(done)} of {len(rows)} completed. Results in {out}/")

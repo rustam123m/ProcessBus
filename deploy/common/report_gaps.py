@@ -37,6 +37,7 @@ GAP_OK = 100      # >100 gaps => limit
 CRC_OK = 100      # >100 crc  => limit
 KILO = 1000       # >=1000 imissed => real drops => limit
 TOL = 0.01        # RX/TX rate-match tolerance
+WIRE_OVERHEAD = 24  # preamble + SFD + FCS + IFG, per frame
 
 
 def steady_pps(log):
@@ -56,12 +57,16 @@ def steady_pps(log):
 
 
 def steady_mbps(log):
-    """Median steady-state wire load from the periodic 'Load(Mbps)' table.
+    """Median steady-state L2 load from the periodic 'Load(Mbps)' table.
 
     The receiver prints "Load(Mbps) | RX | TX |" and the generator prints a
     single TX column, so column 1 is the interesting direction in both. Same
     median-of-samples treatment as steady_pps: the lifetime average would be
     diluted by the seconds before and after the generator runs.
+
+    This is the L2 frame only. The NIC byte counters behind it exclude the
+    preamble, the SFD, the FCS and the interframe gap, so it understates link
+    occupancy - see steady_wire_mbps().
     """
     if not os.path.isfile(log):
         return 0.0
@@ -75,6 +80,27 @@ def steady_mbps(log):
         return 0.0
     core = nz[1:-1] if len(nz) > 3 else nz   # drop first ramp + last partial
     return round(statistics.median(core), 1)
+
+
+def steady_wire_mbps(log):
+    """Median steady-state wire load: what the link actually carried.
+
+    Prefers the receiver's own 'Wire(Mbps)' row. Logs captured before that row
+    existed are corrected here instead, from the two counters they do carry:
+    every frame costs WIRE_OVERHEAD bytes that no NIC register reports.
+    """
+    if not os.path.isfile(log):
+        return 0.0
+    vals = []
+    for line in open(log, errors="ignore"):
+        m = re.match(r"\s*Wire\(Mbps\)\s*\|\s*([\d.]+)\s*\|", line)
+        if m:
+            vals.append(float(m.group(1)))
+    nz = [v for v in vals if v > 0]
+    if nz:
+        core = nz[1:-1] if len(nz) > 3 else nz
+        return round(statistics.median(core), 1)
+    return round(steady_mbps(log) + steady_pps(log) * WIRE_OVERHEAD * 8 / 1e6, 1)
 
 
 def bad_streams(proc_log):

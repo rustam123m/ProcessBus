@@ -21,6 +21,9 @@ extern volatile bool g_doWork;
 
 namespace 
 {
+    // Preamble, SFD, FCS and the interframe gap: on the wire, in no counter.
+    constexpr uint64_t ETH_WIRE_OVERHEAD = 24;
+
     int lcore_processor(void *arg)
     {
         LCoreProcessor *conf = reinterpret_cast< LCoreProcessor* >(arg);
@@ -482,6 +485,14 @@ void RX_Application::DisplayStatistic(unsigned interval_sec)
     uint64_t rx_bps = (m_lastPortStat.ibytes - start.ibytes) / interval_sec;
     uint64_t tx_bps = (m_lastPortStat.obytes - start.obytes) / interval_sec;
 
+    /*
+     * ibytes/obytes carry the L2 frame alone: the PMD subtracts the FCS and
+     * neither the preamble nor the interframe gap ever reaches a register.
+     * Link occupancy needs them back, so add the overhead once per packet.
+     */
+    uint64_t rx_wire_bps = rx_bps + rx_pps * ETH_WIRE_OVERHEAD;
+    uint64_t tx_wire_bps = tx_bps + tx_pps * ETH_WIRE_OVERHEAD;
+
     std::cout << std::format("\nTime {} sec\n\n", m_statDisplaySec);
 
     rte_eth_stats stats;
@@ -490,6 +501,7 @@ void RX_Application::DisplayStatistic(unsigned interval_sec)
                         "            | RX         | TX         |\n"
                         "---------------------------------------\n"
                         "Load(Mbps)  | {:<10.1f} | {:<10.1f} |\n"
+                        "Wire(Mbps)  | {:<10.1f} | {:<10.1f} |\n"
                         "PPS         | {:<10} | {:<10} |\n"
                         "Packets     | {:<10} | {:<10} |\n"
                         "MBytes      | {:<10.1f} | {:<10.1f} |\n"
@@ -498,6 +510,7 @@ void RX_Application::DisplayStatistic(unsigned interval_sec)
                         "No-mbuf     | {:<10} |            |\n"
                         "Q_Errors    | {:<10} |            |\n",
                         BYTES_TO_MEGABITS(rx_bps), BYTES_TO_MEGABITS(tx_bps),
+                        BYTES_TO_MEGABITS(rx_wire_bps), BYTES_TO_MEGABITS(tx_wire_bps),
                         rx_pps, tx_pps,
                         stats.ipackets, stats.opackets,
                         BYTES_TO_MEGABYTES(stats.ibytes), BYTES_TO_MEGABYTES(stats.obytes),
