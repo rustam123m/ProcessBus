@@ -88,13 +88,26 @@ namespace
         // Main cycle
         DPDK::CyclicStat procStat;
         app.RegisterCycleStat("Main", &procStat);
+        /*
+         * With --rx-account-burst the pass is opened before the descriptor
+         * fetch, so a productive poll is charged for its own rte_eth_rx_burst().
+         * An empty poll never reaches MarkProcEnd, and the next iteration just
+         * overwrites the begin tick, so empty polls stay excluded either way.
+         */
+        const bool accountBurst = app.AccountRxBurst();
+
         procStat.MarkStartCycling();
         while (g_doWork) {
+            if (accountBurst) {
+                procStat.MarkProcBegin();
+            }
             uint16_t rxNum = rte_eth_rx_burst(eth.GetID(), queue_id,
                                               matrix.stages[PBus::START_STAGE].buf,
                                               RX_BURST_SIZE);
             if (rxNum > 0) {
-                procStat.MarkProcBegin();
+                if (!accountBurst) {
+                    procStat.MarkProcBegin();
+                }
 
                 // Processing pipeline
                 matrix.stages[PBus::START_STAGE].num = rxNum;
@@ -260,6 +273,7 @@ void RX_Application::ParseCmdOptions(int argc, char* argv[])
                               cxxopts::value< unsigned >())
             ("rx-desc", "RX descriptor ring size, 0 for the platform default",
                         cxxopts::value< unsigned >())
+            ("rx-account-burst", "Count rte_eth_rx_burst() of a productive poll as RX load")
             ("time", "Stop after N seconds, 0 to run until interrupted", cxxopts::value< unsigned >());
 
         auto result = options.parse(argc, argv);
@@ -289,6 +303,7 @@ void RX_Application::ParseCmdOptions(int argc, char* argv[])
         if (result.count("rx-desc")) {
             m_rxDescNum = result["rx-desc"].as< unsigned >();
         }
+        m_accountRxBurst = result.count("rx-account-burst") > 0;
         if (result.count("time")) {
             m_runTimeSec = result["time"].as< unsigned >();
         }

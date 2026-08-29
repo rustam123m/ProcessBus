@@ -49,6 +49,9 @@ public:
     // EAL init and link wait are excluded from the --time limit.
     void MarkRunStarted() { m_runStarted = true; }
 
+    // Charge rte_eth_rx_burst() to the RX core instead of to the idle poll.
+    bool AccountRxBurst() const { return m_accountRxBurst; }
+
     // One lost frame increments both counters: takes the larger per stream.
     void CountGaps(uint64_t &goose, uint64_t &sv);
 
@@ -96,6 +99,10 @@ public:
     // 0 keeps the platform default. The NIC clamps whatever is asked for, so
     // this only ever lowers the ring - see the granted counts in the banner.
     unsigned        m_rxDescNum = 0;
+
+    // Counts the descriptor fetch of a productive poll as processing time.
+    // Empty polls stay excluded either way.
+    bool            m_accountRxBurst = false;
 
     // Written by the main thread, read by the statistics thread.
     volatile bool   m_runStarted = false;
