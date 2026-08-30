@@ -6,7 +6,13 @@
 #include <rte_mbuf.h>
 #include <rte_prefetch.h>
 
-constexpr unsigned  RX_BURST_SIZE = 32;
+// Overridable from the build so the batch size can be A/B tested: on aarch64
+// the descriptor ring is uncached, so the per-call cost is largely fixed and
+// a bigger batch amortises it.
+#ifndef PBUS_RX_BURST_SIZE
+#  define PBUS_RX_BURST_SIZE 32
+#endif
+constexpr unsigned  RX_BURST_SIZE = PBUS_RX_BURST_SIZE;
 constexpr unsigned  PREFETCH_DIST = 4;
 
 namespace PBus

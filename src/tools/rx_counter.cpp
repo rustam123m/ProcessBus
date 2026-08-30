@@ -21,6 +21,8 @@
 
 #include <csignal>
 #include <cstdio>
+#include <cstring>
+#include <cstdlib>
 #include <rte_cycles.h>
 #include <rte_ethdev.h>
 
@@ -32,7 +34,7 @@ static void signal_handler(int /* sig */)
     g_doWork = 1;
 }
 
-static void rx_counter()
+static void rx_counter(unsigned runTimeSec)
 {
     if (rte_eth_dev_count_avail() < 1) {
         rte_exit(EXIT_FAILURE, "Need at least 1 DPDK port\n");
@@ -78,6 +80,10 @@ static void rx_counter()
     const uint64_t ticks_per_sec = rte_get_tsc_hz();
     uint64_t next_print = rte_rdtsc() + ticks_per_sec;
 
+    const uint64_t deadline = runTimeSec
+                                  ? rte_rdtsc() + runTimeSec * ticks_per_sec
+                                  : 0;
+
     rte_mbuf* mbuf[BURST] = {};
     while (g_doWork == 0) {
         uint16_t rx = rte_eth_rx_burst(port.GetID(), 0, mbuf, BURST);
@@ -113,6 +119,11 @@ static void rx_counter()
             pkts_win = 0;
             bytes_win = 0;
             next_print += ticks_per_sec;
+
+            if (deadline && rte_rdtsc() >= deadline) {
+                std::printf("Run time limit reached, exiting\n");
+                break;
+            }
         }
     }
 }
@@ -129,7 +140,14 @@ int main(int argc, char* argv[])
     std::signal(SIGINT,  signal_handler);
     std::signal(SIGTERM, signal_handler);
 
-    rx_counter();
+    unsigned runTimeSec = 0;
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--time") == 0 && i + 1 < argc) {
+            runTimeSec = std::strtoul(argv[++i], nullptr, 10);
+        }
+    }
+
+    rx_counter(runTimeSec);
     rte_eal_cleanup();
     return 0;
 }
