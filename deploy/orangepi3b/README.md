@@ -1,8 +1,9 @@
 # OrangePi 3B — Onboarding
 
-Hardware: Rockchip RK3566, Cortex-A55 ×4 @ 1.6 GHz, 1.92 GiB LPDDR4. Single
-PCIe ×1 lane to a populated mini-PCIe slot (Intel I225-V here, BDF
-`0000:01:00.0`). Built-in GMAC `end0` for management / af_packet sniffing.
+Hardware: Rockchip RK3566, Cortex-A55 ×4 @ 1.6 GHz, 1.92 GiB LPDDR4. The M.2
+M-Key PCIe 2.0 ×1 path is populated by an external Intel I225-V NIC (BDF
+`0000:01:00.0`). Built-in GMAC `end0` is used for management / af_packet
+sniffing.
 
 OS: Armbian (Debian trixie userland) with PREEMPT_RT 6.18.27 kernel.
 
